@@ -1,0 +1,34 @@
+{
+  "name": "spoke",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:clean": "rm -rf .next && next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test --import tsx",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit --incremental false",
+    "db:init": "tsx scripts/db-init.ts",
+    "db:seed:scenarios": "tsx scripts/seed-scenarios.ts",
+    "import:preset": "tsx scripts/import-preset-content.ts"
+  },
+  "dependencies": {
+    "next": "^15.3.0",
+    "pg": "^8.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.3",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.5.0",
+    "tailwindcss": "^4.1.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.0"
+  }
+}

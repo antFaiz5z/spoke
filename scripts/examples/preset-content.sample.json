@@ -1,0 +1,9 @@
+[
+  {
+    "scenarioSlug": "job-interview",
+    "title": "Tell Me About Yourself",
+    "rawText": "Interviewer: Tell me about yourself.\n\nCandidate: I have worked in product for five years and I enjoy solving user problems.",
+    "contentKind": "dialogue",
+    "difficultyLevel": "B1"
+  }
+]
