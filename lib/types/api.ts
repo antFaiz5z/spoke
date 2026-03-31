@@ -100,6 +100,11 @@ export type CreateGeneratedDraftResponse = {
   status: "ready";
 };
 
+export type InsertGeneratedDraftToStageResponse = {
+  generatedDraftId: string;
+  insertedToStage: true;
+};
+
 export type MarkReadRequest = {
   event: "body_interaction";
 };

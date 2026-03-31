@@ -33,3 +33,27 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.spoke-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.spoke-marquee-track {
+  display: inline-flex;
+  min-width: max-content;
+  gap: 2.5rem;
+  padding-right: 2.5rem;
+  animation: spoke-marquee 14s linear infinite;
+  will-change: transform;
+}
+
+@keyframes spoke-marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(calc(-50% - 1.25rem));
+  }
+}

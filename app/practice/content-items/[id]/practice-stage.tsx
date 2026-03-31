@@ -1,69 +1,43 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useRouter } from "next/navigation";
 import {
   buildPracticeNodeIndex,
   computeDistanceDrivenHover,
   createPracticeNodeKey,
   createSpeechCacheKey,
-  getPlaybackControlState,
   getParagraphProgressIndex,
   setSpeechCacheEntry,
   type LayoutNodeIndex,
-  type Rect,
   type PracticeNodeKey,
+  type Rect,
 } from "@/lib/practice";
+import {
+  getNextHeaderHidden,
+  getStageViewportPadding,
+} from "@/lib/practice-stage";
 import { getDefaultEnglishVoiceOptions } from "@/lib/tts";
 import type { ContentItemDetailResponse } from "@/lib/types/api";
-import type { HoverLevel } from "@/lib/types/runtime";
+import { DraftStageSurface } from "./draft-stage-surface";
+import { FloatingPlayer } from "./floating-player";
+import {
+  buildFirstSentenceByParagraphId,
+  buildSentenceTrack,
+  getPlaybackStatusLabel,
+  levelLabel,
+  playbackModeLabel,
+  type PlaybackMode,
+  type SentenceTrackItem,
+  type TtsStatus,
+} from "./practice-stage-controller";
+import { MinusIcon, PlusIcon } from "./stage-icons";
+import { StageHeader } from "./stage-header";
+import { TextStageSurface } from "./text-stage-surface";
 
 type PracticeStageProps = {
   detail: ContentItemDetailResponse;
 };
-
-function levelTone(index: number) {
-  if (index === 0) {
-    return "border-[var(--paragraph)]/35 bg-[var(--paragraph)]/6";
-  }
-  if (index % 2 === 0) {
-    return "border-[var(--sentence)]/25 bg-[var(--sentence)]/5";
-  }
-  return "border-[var(--token)]/20 bg-[var(--token)]/5";
-}
-
-function hoverClass(level: HoverLevel) {
-  if (level === "paragraph") {
-    return "ring-2 ring-[var(--paragraph)]/45 bg-[var(--paragraph)]/8";
-  }
-  if (level === "sentence") {
-    return "ring-2 ring-[var(--sentence)]/45 bg-[var(--sentence)]/10";
-  }
-  return "bg-[var(--token)]/15 text-black";
-}
-
-function playingClass(level: HoverLevel) {
-  if (level === "paragraph") {
-    return "ring-2 ring-[var(--paragraph)] bg-[var(--paragraph)]/12 shadow-[0_0_0_1px_rgba(194,65,12,0.08)]";
-  }
-  if (level === "sentence") {
-    return "ring-2 ring-[var(--sentence)] bg-[var(--sentence)]/12";
-  }
-  return "bg-[var(--token)]/25 text-black";
-}
-
-function levelLabel(level: HoverLevel | null) {
-  if (level === "paragraph") {
-    return "Paragraph";
-  }
-  if (level === "sentence") {
-    return "Sentence";
-  }
-  if (level === "token") {
-    return "Word";
-  }
-  return "Idle";
-}
 
 function toRect(rect: DOMRect): Rect {
   return {
@@ -85,15 +59,24 @@ function expandRect(rect: Rect, padding: number): Rect {
 
 export function PracticeStage({ detail }: PracticeStageProps) {
   const router = useRouter();
-  const { scenario, contentItem, structuredContent, articleProgress, articleReadState, navigation } =
-    detail;
+  const {
+    scenario,
+    contentItem,
+    structuredContent,
+    articleProgress,
+    articleReadState,
+    navigation,
+  } = detail;
+
   const [hoveredKey, setHoveredKey] = useState<PracticeNodeKey | null>(null);
   const [playingKey, setPlayingKey] = useState<PracticeNodeKey | null>(null);
+  const [currentSentenceKey, setCurrentSentenceKey] = useState<PracticeNodeKey | null>(null);
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("single");
   const [voiceId, setVoiceId] = useState("English_expressive_narrator");
   const [farthestParagraphIndex, setFarthestParagraphIndex] = useState(
     articleProgress.farthestParagraphIndex,
   );
-  const [ttsStatus, setTtsStatus] = useState<"idle" | "loading" | "playing" | "error">("idle");
+  const [ttsStatus, setTtsStatus] = useState<TtsStatus>("idle");
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [generateDrawerOpen, setGenerateDrawerOpen] = useState(false);
   const [generatePrompt, setGeneratePrompt] = useState("");
@@ -101,38 +84,66 @@ export function PracticeStage({ detail }: PracticeStageProps) {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [isMarkingRead, setIsMarkingRead] = useState(false);
   const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const [stagePadding, setStagePadding] = useState(() =>
+    getStageViewportPadding({
+      headerHeight: 120,
+      playerHeight: 120,
+      extraTop: 12,
+      extraBottom: 12,
+    }),
+  );
+
   const hasMarkedReadRef = useRef(articleReadState.hasRead);
+  const lastStageScrollTopRef = useRef(0);
+  const playbackModeRef = useRef<PlaybackMode>("single");
+  const currentSentenceKeyRef = useRef<PracticeNodeKey | null>(null);
+  const playingKeyRef = useRef<PracticeNodeKey | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const playerRef = useRef<HTMLDivElement | null>(null);
   const textStageRef = useRef<HTMLElement | null>(null);
+  const draftStageRef = useRef<HTMLElement | null>(null);
   const paragraphRefs = useRef<Map<string, HTMLElement>>(new Map());
   const sentenceRefs = useRef<Map<string, HTMLElement>>(new Map());
   const tokenRefs = useRef<Map<string, HTMLElement>>(new Map());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const speechCacheRef = useRef<Map<string, string>>(new Map());
+
   const nodeIndex = useMemo(
     () => buildPracticeNodeIndex(structuredContent),
     [structuredContent],
   );
   const voiceOptions = useMemo(() => getDefaultEnglishVoiceOptions(), []);
+  const sentenceTrack = useMemo<SentenceTrackItem[]>(
+    () => buildSentenceTrack(structuredContent),
+    [structuredContent],
+  );
+  const firstSentenceByParagraphId = useMemo(
+    () => buildFirstSentenceByParagraphId(structuredContent),
+    [structuredContent],
+  );
+  const sentenceIndexByKey = useMemo(
+    () => new Map(sentenceTrack.map((sentence, index) => [sentence.key, index])),
+    [sentenceTrack],
+  );
 
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+  function getAnchorSentenceKey(key: PracticeNodeKey): PracticeNodeKey | null {
+    const entry = nodeIndex.byKey[key];
+    if (!entry) {
+      return null;
+    }
 
-      if (objectUrlRef.current) {
-        objectUrlRef.current = null;
-      }
+    if (entry.level === "sentence" && entry.sentenceId) {
+      return key;
+    }
 
-      for (const objectUrl of speechCacheRef.current.values()) {
-        URL.revokeObjectURL(objectUrl);
-      }
+    if (entry.level === "token" && entry.sentenceId) {
+      return createPracticeNodeKey("sentence", entry.sentenceId);
+    }
 
-      speechCacheRef.current.clear();
-    };
-  }, []);
+    return firstSentenceByParagraphId.get(entry.paragraphId) ?? null;
+  }
 
   async function ensureReadMarked() {
     if (hasMarkedReadRef.current || isMarkingRead) {
@@ -159,10 +170,7 @@ export function PracticeStage({ detail }: PracticeStageProps) {
   }
 
   async function syncProgress(nextParagraphIndex: number) {
-    if (
-      nextParagraphIndex <= farthestParagraphIndex ||
-      isUpdatingProgress
-    ) {
+    if (nextParagraphIndex <= farthestParagraphIndex || isUpdatingProgress) {
       return;
     }
 
@@ -190,11 +198,12 @@ export function PracticeStage({ detail }: PracticeStageProps) {
 
   async function playNodeAudio(key: PracticeNodeKey) {
     const entry = nodeIndex.byKey[key];
-
     if (!entry) {
       return;
     }
 
+    setPlayingKey(key);
+    playingKeyRef.current = key;
     setTtsStatus("loading");
     setTtsError(null);
 
@@ -218,12 +227,7 @@ export function PracticeStage({ detail }: PracticeStageProps) {
 
         const audioBlob = await response.blob();
         objectUrl = URL.createObjectURL(audioBlob);
-        const replacedUrl = setSpeechCacheEntry(
-          speechCacheRef.current,
-          cacheKey,
-          objectUrl,
-        );
-
+        const replacedUrl = setSpeechCacheEntry(speechCacheRef.current, cacheKey, objectUrl);
         if (replacedUrl) {
           URL.revokeObjectURL(replacedUrl);
         }
@@ -233,11 +237,6 @@ export function PracticeStage({ detail }: PracticeStageProps) {
 
       if (!audioRef.current) {
         audioRef.current = new Audio();
-        audioRef.current.onended = () => setTtsStatus("idle");
-        audioRef.current.onerror = () => {
-          setTtsStatus("error");
-          setTtsError("Audio playback failed.");
-        };
       }
 
       audioRef.current.src = objectUrl;
@@ -249,32 +248,34 @@ export function PracticeStage({ detail }: PracticeStageProps) {
     }
   }
 
-  function stopPlayback() {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+  function setPlaybackSelection(key: PracticeNodeKey) {
+    const anchorSentenceKey = getAnchorSentenceKey(key);
+    if (anchorSentenceKey) {
+      setCurrentSentenceKey(anchorSentenceKey);
+      currentSentenceKeyRef.current = anchorSentenceKey;
     }
-
-    setTtsStatus("idle");
-    setTtsError(null);
   }
 
-  function replayCurrentNode() {
-    if (!playingKey) {
+  function scrollSentenceIntoView(sentenceKey: PracticeNodeKey | null) {
+    if (!sentenceKey) {
       return;
     }
 
-    void playNodeAudio(playingKey);
+    const sentenceId = sentenceKey.split(":")[1];
+    const sentenceElement = sentenceRefs.current.get(sentenceId);
+    sentenceElement?.scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
   }
 
   function activateNode(key: PracticeNodeKey) {
     const entry = nodeIndex.byKey[key];
-
     if (!entry) {
       return;
     }
 
-    setPlayingKey(key);
+    setPlaybackSelection(key);
     void ensureReadMarked();
     void playNodeAudio(key);
 
@@ -282,6 +283,61 @@ export function PracticeStage({ detail }: PracticeStageProps) {
     if (nextParagraphIndex !== null) {
       void syncProgress(nextParagraphIndex);
     }
+  }
+
+  function playSentenceByOffset(offset: -1 | 1) {
+    const fallbackKey = sentenceTrack[0]?.key ?? null;
+    const baseKey = currentSentenceKeyRef.current ?? fallbackKey;
+    if (!baseKey) {
+      return;
+    }
+
+    const currentIndex = sentenceIndexByKey.get(baseKey) ?? 0;
+    const nextSentence = sentenceTrack[currentIndex + offset];
+    if (!nextSentence) {
+      return;
+    }
+
+    currentSentenceKeyRef.current = nextSentence.key;
+    setCurrentSentenceKey(nextSentence.key);
+    scrollSentenceIntoView(nextSentence.key);
+    activateNode(nextSentence.key);
+  }
+
+  function togglePlayPause() {
+    if (ttsStatus === "loading") {
+      return;
+    }
+
+    if (ttsStatus === "playing" && audioRef.current) {
+      audioRef.current.pause();
+      setTtsStatus("paused");
+      return;
+    }
+
+    if (ttsStatus === "paused" && audioRef.current) {
+      void audioRef.current.play();
+      setTtsStatus("playing");
+      return;
+    }
+
+    const nextKey =
+      playingKeyRef.current ?? currentSentenceKeyRef.current ?? sentenceTrack[0]?.key ?? null;
+    if (nextKey) {
+      activateNode(nextKey);
+    }
+  }
+
+  function cyclePlaybackMode() {
+    setPlaybackMode((current) => {
+      if (current === "single") {
+        return "repeat-one";
+      }
+      if (current === "repeat-one") {
+        return "auto-next";
+      }
+      return "single";
+    });
   }
 
   async function handleGenerateDraft() {
@@ -323,7 +379,7 @@ export function PracticeStage({ detail }: PracticeStageProps) {
   }
 
   function setNodeRef(
-    map: React.MutableRefObject<Map<string, HTMLElement>>,
+    map: MutableRefObject<Map<string, HTMLElement>>,
     id: string,
     element: HTMLElement | null,
   ) {
@@ -431,268 +487,238 @@ export function PracticeStage({ detail }: PracticeStageProps) {
     setHoveredKey((current) => (current === result.hoveredKey ? current : result.hoveredKey));
   }
 
+  function handleStageScroll(scrollTop: number) {
+    setHeaderHidden((previousHidden) =>
+      getNextHeaderHidden({
+        previousHidden,
+        scrollTop,
+        lastScrollTop: lastStageScrollTopRef.current,
+      }),
+    );
+    lastStageScrollTopRef.current = scrollTop;
+  }
+
+  useEffect(() => {
+    playbackModeRef.current = playbackMode;
+  }, [playbackMode]);
+
+  useEffect(() => {
+    currentSentenceKeyRef.current = currentSentenceKey;
+  }, [currentSentenceKey]);
+
+  useEffect(() => {
+    playingKeyRef.current = playingKey;
+  }, [playingKey]);
+
+  useEffect(() => {
+    const firstSentenceKey = sentenceTrack[0]?.key ?? null;
+    setCurrentSentenceKey(firstSentenceKey);
+    currentSentenceKeyRef.current = firstSentenceKey;
+  }, [sentenceTrack]);
+
+  useEffect(() => {
+    const audio = audioRef.current ?? new Audio();
+    audioRef.current = audio;
+
+    const handleEnded = () => {
+      const currentMode = playbackModeRef.current;
+      const currentKey = playingKeyRef.current;
+      const anchorSentenceKey = currentSentenceKeyRef.current;
+
+      if (currentMode === "repeat-one" && currentKey) {
+        void playNodeAudio(currentKey);
+        return;
+      }
+
+      if (currentMode === "auto-next" && anchorSentenceKey) {
+        const currentIndex = sentenceIndexByKey.get(anchorSentenceKey) ?? -1;
+        const nextSentence = sentenceTrack[currentIndex + 1];
+        if (nextSentence) {
+          currentSentenceKeyRef.current = nextSentence.key;
+          setCurrentSentenceKey(nextSentence.key);
+          scrollSentenceIntoView(nextSentence.key);
+          activateNode(nextSentence.key);
+          return;
+        }
+      }
+
+      setTtsStatus("idle");
+    };
+
+    const handlePause = () => {
+      if (audio.currentTime > 0 && !audio.ended) {
+        setTtsStatus((current) => (current === "playing" ? "paused" : current));
+      }
+    };
+
+    const handleError = () => {
+      setTtsStatus("error");
+      setTtsError("Audio playback failed.");
+    };
+
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("error", handleError);
+
+    return () => {
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("error", handleError);
+    };
+  }, [sentenceIndexByKey, sentenceTrack]);
+
+  useEffect(() => {
+    const updateStagePadding = () => {
+      setStagePadding(
+        getStageViewportPadding({
+          headerHeight: headerRef.current?.offsetHeight ?? 0,
+          playerHeight: playerRef.current?.offsetHeight ?? 0,
+          extraTop: 12,
+          extraBottom: 12,
+        }),
+      );
+    };
+
+    updateStagePadding();
+
+    const observer = new ResizeObserver(updateStagePadding);
+    if (headerRef.current) {
+      observer.observe(headerRef.current);
+    }
+    if (playerRef.current) {
+      observer.observe(playerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+
+      objectUrlRef.current = null;
+      for (const objectUrl of speechCacheRef.current.values()) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      speechCacheRef.current.clear();
+    };
+  }, []);
+
   const playingEntry = playingKey ? nodeIndex.byKey[playingKey] : null;
-  const playbackControls = getPlaybackControlState(playingKey, ttsStatus);
+  const currentSentenceIndex =
+    currentSentenceKey ? (sentenceIndexByKey.get(currentSentenceKey) ?? -1) : -1;
+  const canGoPrevSentence = currentSentenceIndex > 0;
+  const canGoNextSentence =
+    currentSentenceIndex >= 0 && currentSentenceIndex < sentenceTrack.length - 1;
+  const currentSentenceMeta =
+    currentSentenceIndex >= 0 ? sentenceTrack[currentSentenceIndex] : null;
+  const statusLabel = getPlaybackStatusLabel(ttsStatus, ttsError);
+  const playerText =
+    playingEntry?.text ??
+    currentSentenceMeta?.text ??
+    "Select a word, sentence, or paragraph to start practicing.";
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 py-10">
-      <header className="mb-8 flex flex-col gap-4">
-        <a
-          href={`/scenarios/${scenario.slug}`}
-          className="text-sm uppercase tracking-[0.16em] text-[var(--paragraph)]"
-        >
-          Back to article catalog
-        </a>
+    <main className="relative min-h-screen overflow-x-hidden">
+      <StageHeader
+        headerRef={headerRef}
+        hidden={headerHidden}
+        scenarioSlug={scenario.slug}
+        scenarioTitle={scenario.title}
+        contentKind={contentItem.contentKind}
+        difficultyLevel={contentItem.difficultyLevel}
+        title={contentItem.title}
+        farthestParagraphIndex={farthestParagraphIndex}
+        currentSentenceIndex={currentSentenceIndex}
+        sentenceCount={sentenceTrack.length}
+      />
 
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.14em] text-black/55">
-              <span>{scenario.title}</span>
-              <span>·</span>
-              <span>{contentItem.contentKind}</span>
-              <span>·</span>
-              <span>{contentItem.difficultyLevel}</span>
-            </div>
-            <h1 className="mt-3 text-4xl font-semibold">{contentItem.title}</h1>
-            <p className="mt-3 text-sm text-black/65">
-              Resume paragraph {farthestParagraphIndex + 1}
-            </p>
-          </div>
+      <div className="fixed inset-0">
+        <div className="relative h-full overflow-hidden">
+          <TextStageSurface
+            scrollRef={textStageRef}
+            visible={!generateDrawerOpen}
+            structuredContent={structuredContent}
+            hoveredKey={hoveredKey}
+            playingKey={playingKey}
+            currentSentenceKey={currentSentenceKey}
+            paragraphRefs={paragraphRefs}
+            sentenceRefs={sentenceRefs}
+            tokenRefs={tokenRefs}
+            stagePaddingTop={stagePadding.paddingTop}
+            stagePaddingBottom={stagePadding.paddingBottom}
+            onPointerMove={handleTextStagePointerMove}
+            onPointerLeave={() => setHoveredKey(null)}
+            onScroll={handleStageScroll}
+            onActivateNode={activateNode}
+            setNodeRef={setNodeRef}
+          />
 
-          <nav className="flex items-center gap-3">
-            <a
-              href={navigation.prevContentItemId ? `/practice/content-items/${navigation.prevContentItemId}` : "#"}
-              aria-disabled={navigation.isFirst}
-              className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                navigation.isFirst
-                  ? "cursor-not-allowed border-black/10 text-black/30"
-                  : "border-[var(--border)] bg-[var(--surface)] text-black/75 hover:bg-white"
-              }`}
-            >
-              Previous
-            </a>
-            <a
-              href={navigation.nextContentItemId ? `/practice/content-items/${navigation.nextContentItemId}` : "#"}
-              aria-disabled={navigation.isLast}
-              className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                navigation.isLast
-                  ? "cursor-not-allowed border-black/10 text-black/30"
-                  : "border-[var(--border)] bg-[var(--surface)] text-black/75 hover:bg-white"
-              }`}
-            >
-              Next
-            </a>
-          </nav>
-        </div>
-      </header>
-
-      <section
-        ref={textStageRef}
-        className="rounded-[2rem] border border-[var(--border)] bg-[var(--surface)]/90 p-8 shadow-[0_20px_80px_rgba(60,35,10,0.08)]"
-        onMouseMove={handleTextStagePointerMove}
-        onMouseLeave={() => setHoveredKey(null)}
-      >
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-          {structuredContent.paragraphs.map((paragraph, index) => {
-            const paragraphKey = createPracticeNodeKey("paragraph", paragraph.id);
-            const paragraphStateClass =
-              playingKey === paragraphKey
-                ? playingClass("paragraph")
-                : hoveredKey === paragraphKey
-                  ? hoverClass("paragraph")
-                  : "";
-
-            return (
-              <article
-                key={paragraph.id}
-                ref={(element) => setNodeRef(paragraphRefs, paragraph.id, element)}
-                className={`rounded-[1.5rem] border p-5 transition ${levelTone(index)} ${paragraphStateClass}`}
-                onClick={() => activateNode(paragraphKey)}
-              >
-                {paragraph.speakerLabel ? (
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--paragraph)]">
-                    {paragraph.speakerLabel}
-                  </p>
-                ) : null}
-
-                <div className="flex flex-wrap gap-x-2 gap-y-3 text-2xl leading-[1.8] text-black/90">
-                  {paragraph.sentences.map((sentence) => {
-                    const sentenceKey = createPracticeNodeKey("sentence", sentence.id);
-                    const sentenceStateClass =
-                      playingKey === sentenceKey
-                        ? playingClass("sentence")
-                        : hoveredKey === sentenceKey
-                          ? hoverClass("sentence")
-                          : "";
-
-                    return (
-                      <span
-                        key={sentence.id}
-                        ref={(element) => setNodeRef(sentenceRefs, sentence.id, element)}
-                        className={`inline-flex flex-wrap items-center gap-x-2 gap-y-3 rounded-xl px-1 py-1 transition ${sentenceStateClass}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          activateNode(sentenceKey);
-                        }}
-                      >
-                        {sentence.tokens.map((token) => {
-                          const tokenKey = createPracticeNodeKey("token", token.id);
-                          const tokenStateClass =
-                            playingKey === tokenKey
-                              ? playingClass("token")
-                              : hoveredKey === tokenKey
-                                ? hoverClass("token")
-                                : "";
-
-                          if (token.isPunctuation) {
-                            return (
-                              <span
-                                key={token.id}
-                                className="text-black/55"
-                              >
-                                {token.text}
-                              </span>
-                            );
-                          }
-
-                          return (
-                            <button
-                              key={token.id}
-                              ref={(element) => setNodeRef(tokenRefs, token.id, element)}
-                              type="button"
-                              className={`rounded-md px-1.5 py-0.5 text-left transition ${tokenStateClass || "hover:bg-[var(--token)]/10"}`}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                activateNode(tokenKey);
-                              }}
-                            >
-                              {token.text}
-                            </button>
-                          );
-                        })}
-                      </span>
-                    );
-                  })}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <div className="mt-6 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface)]/80 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.16em] text-[var(--sentence)]">
-              {levelLabel(playingEntry?.level ?? null)} playback
-            </p>
-            <p className="mt-1 text-sm text-black/65">
-              {playingEntry
-                ? playingEntry.text
-                : "Click a paragraph, sentence, or word to play MiniMax TTS and sync reading state."}
-            </p>
-            <p className="mt-1 text-xs text-black/45">
-              {ttsStatus === "loading" ? "Synthesizing audio..." : null}
-              {ttsStatus === "playing" ? "Playing audio..." : null}
-              {ttsStatus === "error" ? ttsError || "Playback failed." : null}
-              {(ttsStatus === "loading" || ttsStatus === "playing" || ttsStatus === "error") &&
-              (isMarkingRead || isUpdatingProgress)
-                ? " · "
-                : null}
-              {isMarkingRead ? "Marking article as read..." : null}
-              {isMarkingRead && isUpdatingProgress ? " · " : null}
-              {isUpdatingProgress ? "Syncing paragraph progress..." : null}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={replayCurrentNode}
-              disabled={!playbackControls.canReplay}
-              className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                playbackControls.canReplay
-                  ? "border-[var(--border)] text-black/70 hover:bg-white"
-                  : "cursor-not-allowed border-black/10 text-black/30"
-              }`}
-            >
-              Replay
-            </button>
-            <button
-              type="button"
-              onClick={stopPlayback}
-              disabled={!playbackControls.canStop}
-              className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                playbackControls.canStop
-                  ? "border-[var(--border)] text-black/70 hover:bg-white"
-                  : "cursor-not-allowed border-black/10 text-black/30"
-              }`}
-            >
-              Stop
-            </button>
-            <label className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-black/70">
-              <span className="text-xs uppercase tracking-[0.12em] text-black/45">
-                Voice
-              </span>
-              <select
-                value={voiceId}
-                onChange={(event) => setVoiceId(event.target.value)}
-                className="bg-transparent pr-1 outline-none"
-              >
-                {voiceOptions.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => setGenerateDrawerOpen((open) => !open)}
-              className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-black/70"
-            >
-              {generateDrawerOpen ? "Close generator" : "Generate new practice"}
-            </button>
-          </div>
+          <DraftStageSurface
+            scrollRef={draftStageRef}
+            open={generateDrawerOpen}
+            stagePaddingTop={stagePadding.paddingTop}
+            stagePaddingBottom={stagePadding.paddingBottom}
+            generatePrompt={generatePrompt}
+            generateError={generateError}
+            isGenerating={isGenerating}
+            onScroll={handleStageScroll}
+            onClose={() => setGenerateDrawerOpen(false)}
+            onPromptChange={setGeneratePrompt}
+            onGenerate={handleGenerateDraft}
+          />
         </div>
       </div>
 
-      {generateDrawerOpen ? (
-        <div className="mt-6 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface)]/90 p-5">
-          <div className="flex flex-col gap-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-[var(--paragraph)]">
-              Generate draft
-            </p>
-            <textarea
-              value={generatePrompt}
-              onChange={(event) => setGeneratePrompt(event.target.value)}
-              placeholder="Describe the speaking practice you want to generate for this scenario."
-              className="min-h-32 rounded-[1rem] border border-[var(--border)] bg-white/80 px-4 py-3 text-sm leading-7 outline-none"
-            />
-            {generateError ? <p className="text-sm text-red-700">{generateError}</p> : null}
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setGenerateDrawerOpen(false)}
-                className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-black/70"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleGenerateDraft}
-                disabled={isGenerating}
-                className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                  isGenerating
-                    ? "cursor-progress border-black/10 text-black/30"
-                    : "border-[var(--border)] bg-white text-black/75 hover:bg-[var(--surface)]"
-                }`}
-              >
-                {isGenerating ? "Generating..." : "Generate draft"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <button
+        type="button"
+        onClick={() => setGenerateDrawerOpen((open) => !open)}
+        aria-label={generateDrawerOpen ? "Close draft generator" : "Open draft generator"}
+        className={`fixed top-1/2 z-40 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full border text-white shadow-[0_18px_45px_rgba(20,20,10,0.25)] transition hover:scale-[1.02] ${
+          generateDrawerOpen
+            ? "border-red-800/30 bg-red-600 hover:bg-red-500"
+            : "border-emerald-900/25 bg-emerald-600 hover:bg-emerald-500"
+        }`}
+        style={{ right: "calc(env(safe-area-inset-right) + 1rem)" }}
+      >
+        {generateDrawerOpen ? <MinusIcon /> : <PlusIcon />}
+      </button>
+
+      <FloatingPlayer
+        playerRef={playerRef}
+        statusLabel={statusLabel}
+        currentLevelLabel={levelLabel(playingEntry?.level ?? null)}
+        modeLabel={playbackModeLabel(playbackMode)}
+        playbackMode={playbackMode}
+        ttsStatus={ttsStatus}
+        playerText={playerText}
+        canGoPrevSentence={canGoPrevSentence}
+        canGoNextSentence={canGoNextSentence}
+        isFirstArticle={navigation.isFirst}
+        isLastArticle={navigation.isLast}
+        isMarkingRead={isMarkingRead}
+        isUpdatingProgress={isUpdatingProgress}
+        voiceId={voiceId}
+        voiceOptions={voiceOptions}
+        onPrevSentence={() => playSentenceByOffset(-1)}
+        onNextSentence={() => playSentenceByOffset(1)}
+        onPlayPause={togglePlayPause}
+        onPrevArticle={() => {
+          if (navigation.prevContentItemId) {
+            router.push(`/practice/content-items/${navigation.prevContentItemId}`);
+          }
+        }}
+        onNextArticle={() => {
+          if (navigation.nextContentItemId) {
+            router.push(`/practice/content-items/${navigation.nextContentItemId}`);
+          }
+        }}
+        onCyclePlaybackMode={cyclePlaybackMode}
+        onVoiceChange={setVoiceId}
+      />
     </main>
   );
 }

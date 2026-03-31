@@ -3,6 +3,7 @@ import type {
   CreateGeneratedDraftRequest,
   CreateGeneratedDraftResponse,
   GeneratedDraftDetailResponse,
+  InsertGeneratedDraftToStageResponse,
   SaveGeneratedDraftResponse,
 } from "@/lib/types/api";
 import type { StructuredContent } from "@/lib/types/content";
@@ -35,6 +36,19 @@ type GeneratedDraftRow = {
 type SavedContentItemRow = {
   id: string;
 };
+
+type InsertedDraftRow = {
+  id: string;
+};
+
+export function buildInsertGeneratedDraftToStageResponse(
+  id: string,
+): InsertGeneratedDraftToStageResponse {
+  return {
+    generatedDraftId: id,
+    insertedToStage: true,
+  };
+}
 
 export async function createGeneratedDraft(
   input: CreateGeneratedDraftRequest,
@@ -160,6 +174,30 @@ export async function getGeneratedDraftDetail(
     },
     structuredContent: row.structured_content,
   };
+}
+
+export async function insertGeneratedDraftToStage(
+  id: string,
+): Promise<InsertGeneratedDraftToStageResponse> {
+  const pool = getDbPool();
+  const result = await pool.query<InsertedDraftRow>(
+    `
+      UPDATE generated_drafts
+      SET
+        inserted_to_stage = TRUE,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING id
+    `,
+    [id],
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error("Generated draft not found");
+  }
+
+  return buildInsertGeneratedDraftToStageResponse(row.id);
 }
 
 export async function saveGeneratedDraftAsContentItem(
