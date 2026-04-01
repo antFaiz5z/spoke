@@ -1,4 +1,9 @@
 import { buildStructuredContent, normalizeText } from "@/lib/content-processing";
+import {
+  buildRebuiltGeneratedDraftTitle,
+  normalizeGeneratedDraftText,
+} from "@/lib/server/generated-drafts";
+import type { ContentKind, SourceType } from "@/lib/types/content";
 
 export type RebuildTarget = "all" | "content-items" | "generated-drafts";
 
@@ -13,6 +18,17 @@ export type StructuredContentRebuildPayload = {
   structuredContent: ReturnType<typeof buildStructuredContent>;
   paragraphCount: number;
   speakerLabelCount: number;
+  rebuiltTitle: string | null;
+};
+
+type BuildStructuredContentRebuildPayloadInput = {
+  rawText: string;
+  contentKind?: ContentKind;
+  sourceType?: SourceType;
+  isGeneratedDraft?: boolean;
+  existingTitle?: string;
+  scenarioTitle?: string;
+  difficultyLevel?: string;
 };
 
 export function parseRebuildStructuredContentArgs(
@@ -36,16 +52,34 @@ export function parseRebuildStructuredContentArgs(
   };
 }
 
-export function buildStructuredContentRebuildPayload(
-  rawText: string,
-): StructuredContentRebuildPayload {
-  const normalizedText = normalizeText(rawText);
+export function buildStructuredContentRebuildPayload({
+  rawText,
+  contentKind,
+  sourceType,
+  isGeneratedDraft = false,
+  scenarioTitle,
+  difficultyLevel,
+}: BuildStructuredContentRebuildPayloadInput): StructuredContentRebuildPayload {
+  const normalizedText =
+    contentKind && (isGeneratedDraft || sourceType === "generated")
+      ? normalizeGeneratedDraftText(rawText, contentKind)
+      : normalizeText(rawText);
   const structuredContent = buildStructuredContent(normalizedText);
+  const rebuiltTitle =
+    isGeneratedDraft && contentKind && scenarioTitle && difficultyLevel
+      ? buildRebuiltGeneratedDraftTitle({
+          normalizedText,
+          scenarioTitle,
+          contentKind,
+          difficultyLevel,
+        })
+      : null;
 
   return {
     normalizedText,
     structuredContent,
     paragraphCount: structuredContent.paragraphs.length,
     speakerLabelCount: structuredContent.paragraphs.filter((p) => Boolean(p.speakerLabel)).length,
+    rebuiltTitle,
   };
 }

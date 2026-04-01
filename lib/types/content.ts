@@ -7,9 +7,13 @@ export type StructuredContent = {
   paragraphs: ParagraphNode[];
 };
 
+export type ParagraphType = "spoken" | "meta";
+
 export type ParagraphNode = {
   id: string;
   index: number;
+  paragraphType?: ParagraphType;
+  metaLabel?: string | null;
   speakerId?: string | null;
   speakerLabel?: string | null;
   text: string;

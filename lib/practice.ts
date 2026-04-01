@@ -135,12 +135,13 @@ export function buildPracticeNodeIndex(
 
   for (const paragraph of structuredContent.paragraphs) {
     const paragraphKey = createPracticeNodeKey("paragraph", paragraph.id);
+    const paragraphIsPlayable = paragraph.paragraphType !== "meta";
     byKey[paragraphKey] = {
       key: paragraphKey,
       id: paragraph.id,
       level: "paragraph",
       text: paragraph.text,
-      speechText: paragraph.text,
+      speechText: paragraphIsPlayable ? paragraph.text : "",
       paragraphId: paragraph.id,
       paragraphIndex: paragraph.index,
       sentenceId: null,
@@ -153,7 +154,7 @@ export function buildPracticeNodeIndex(
         id: sentence.id,
         level: "sentence",
         text: sentence.text,
-        speechText: sentence.text,
+        speechText: paragraphIsPlayable ? sentence.text : "",
         paragraphId: paragraph.id,
         paragraphIndex: paragraph.index,
         sentenceId: sentence.id,
@@ -166,7 +167,7 @@ export function buildPracticeNodeIndex(
           id: token.id,
           level: "token",
           text: token.text,
-          speechText: token.text,
+          speechText: paragraphIsPlayable ? token.text : "",
           paragraphId: paragraph.id,
           paragraphIndex: paragraph.index,
           sentenceId: sentence.id,

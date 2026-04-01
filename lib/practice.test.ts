@@ -18,20 +18,53 @@ const structuredContent: StructuredContent = {
   version: 1,
   paragraphs: [
     {
-      id: "p1",
+      id: "p0",
       index: 0,
+      paragraphType: "meta",
+      metaLabel: "Situation",
+      speakerId: null,
+      speakerLabel: null,
+      text: "You are taking a job interview.",
+      startOffset: 0,
+      endOffset: 30,
+      sentences: [
+        {
+          id: "s0",
+          index: 0,
+          text: "You are taking a job interview.",
+          startOffset: 0,
+          endOffset: 30,
+          tokens: [
+            {
+              id: "t0",
+              index: 0,
+              text: "You",
+              normalizedText: "you",
+              isPunctuation: false,
+              startOffset: 0,
+              endOffset: 3,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "p1",
+      index: 1,
+      paragraphType: "spoken",
+      metaLabel: null,
       speakerId: "interviewer",
       speakerLabel: "Interviewer",
       text: "Tell me about yourself.",
-      startOffset: 0,
-      endOffset: 24,
+      startOffset: 32,
+      endOffset: 56,
       sentences: [
         {
           id: "s1",
           index: 0,
           text: "Tell me about yourself.",
-          startOffset: 0,
-          endOffset: 24,
+          startOffset: 32,
+          endOffset: 56,
           tokens: [
             {
               id: "t1",
@@ -39,8 +72,8 @@ const structuredContent: StructuredContent = {
               text: "Tell",
               normalizedText: "tell",
               isPunctuation: false,
-              startOffset: 0,
-              endOffset: 4,
+              startOffset: 32,
+              endOffset: 36,
             },
             {
               id: "t2",
@@ -48,8 +81,8 @@ const structuredContent: StructuredContent = {
               text: ".",
               normalizedText: ".",
               isPunctuation: true,
-              startOffset: 23,
-              endOffset: 24,
+              startOffset: 55,
+              endOffset: 56,
             },
           ],
         },
@@ -67,20 +100,23 @@ test("createPracticeNodeKey produces stable level-prefixed keys", () => {
 test("buildPracticeNodeIndex flattens paragraph, sentence, and token nodes", () => {
   const index = buildPracticeNodeIndex(structuredContent);
 
-  assert.equal(index.byKey["paragraph:p1"].text, "Tell me about yourself.");
+  assert.equal(index.byKey["paragraph:p0"].text, "You are taking a job interview.");
+  assert.equal(index.byKey["paragraph:p0"].speechText, "");
   assert.equal(index.byKey["paragraph:p1"].speechText, "Tell me about yourself.");
   assert.equal(index.byKey["sentence:s1"].sentenceId, "s1");
   assert.equal(index.byKey["sentence:s1"].speechText, "Tell me about yourself.");
+  assert.equal(index.byKey["sentence:s0"].speechText, "");
   assert.equal(index.byKey["token:t1"].paragraphId, "p1");
+  assert.equal(index.byKey["token:t0"].speechText, "");
   assert.equal(index.byKey["token:t2"].text, ".");
 });
 
 test("getParagraphProgressIndex resolves a node key back to the owning paragraph index", () => {
   const index = buildPracticeNodeIndex(structuredContent);
 
-  assert.equal(getParagraphProgressIndex(index, "paragraph:p1"), 0);
-  assert.equal(getParagraphProgressIndex(index, "sentence:s1"), 0);
-  assert.equal(getParagraphProgressIndex(index, "token:t1"), 0);
+  assert.equal(getParagraphProgressIndex(index, "paragraph:p1"), 1);
+  assert.equal(getParagraphProgressIndex(index, "sentence:s1"), 1);
+  assert.equal(getParagraphProgressIndex(index, "token:t1"), 1);
   assert.equal(getParagraphProgressIndex(index, null), null);
 });
 

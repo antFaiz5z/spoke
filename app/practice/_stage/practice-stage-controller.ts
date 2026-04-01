@@ -38,6 +38,9 @@ export function playbackModeLabel(mode: PlaybackMode) {
 
 export function buildSentenceTrack(structuredContent: StructuredContent): SentenceTrackItem[] {
   return structuredContent.paragraphs.flatMap((paragraph) =>
+    paragraph.paragraphType === "meta"
+      ? []
+      :
     paragraph.sentences.map((sentence) => ({
       key: createPracticeNodeKey("sentence", sentence.id),
       id: sentence.id,
@@ -51,6 +54,7 @@ export function buildSentenceTrack(structuredContent: StructuredContent): Senten
 export function buildFirstSentenceByParagraphId(structuredContent: StructuredContent) {
   return new Map(
     structuredContent.paragraphs
+      .filter((paragraph) => paragraph.paragraphType !== "meta")
       .filter((paragraph) => paragraph.sentences[0])
       .map((paragraph) => [
         paragraph.id,

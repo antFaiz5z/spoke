@@ -8,8 +8,13 @@ import {
 
 type RebuildRow = {
   id: string;
+  title: string;
   raw_text: string;
   normalized_text: string;
+  content_kind: "dialogue" | "monologue" | "qa" | "script";
+  difficulty_level?: string;
+  scenario_title?: string;
+  source_type?: "preset" | "generated";
 };
 
 type RebuildTable = "content_items" | "generated_drafts";
@@ -26,11 +31,21 @@ async function rebuildTable(table: RebuildTable, apply: boolean) {
 
   try {
     const result = await client.query<RebuildRow>(
-      `SELECT id, raw_text, normalized_text FROM ${table} ORDER BY updated_at DESC`,
+      table === "content_items"
+        ? `SELECT ci.id, ci.title, ci.raw_text, ci.normalized_text, ci.content_kind, ci.difficulty_level, s.title AS scenario_title, ci.source_type FROM ${table} ci INNER JOIN scenarios s ON s.id = ci.scenario_id ORDER BY ci.updated_at DESC`
+        : `SELECT gd.id, gd.title, gd.raw_text, gd.normalized_text, gd.content_kind, gd.difficulty_level, s.title AS scenario_title FROM ${table} gd INNER JOIN scenarios s ON s.id = gd.scenario_id ORDER BY gd.updated_at DESC`,
     );
 
     const preview = result.rows.map((row) => {
-      const payload = buildStructuredContentRebuildPayload(row.raw_text);
+      const payload = buildStructuredContentRebuildPayload({
+        rawText: row.raw_text,
+        contentKind: row.content_kind,
+        sourceType: row.source_type,
+        isGeneratedDraft: table === "generated_drafts",
+        existingTitle: row.title,
+        scenarioTitle: row.scenario_title,
+        difficultyLevel: row.difficulty_level,
+      });
 
       return {
         table,
@@ -38,6 +53,7 @@ async function rebuildTable(table: RebuildTable, apply: boolean) {
         paragraphCount: payload.paragraphCount,
         speakerLabelCount: payload.speakerLabelCount,
         normalizedChanged: payload.normalizedText !== row.normalized_text,
+        titleChanged: payload.rebuiltTitle !== null && payload.rebuiltTitle !== row.title,
       };
     });
 
@@ -48,18 +64,27 @@ async function rebuildTable(table: RebuildTable, apply: boolean) {
     await client.query("BEGIN");
 
     for (const row of result.rows) {
-      const payload = buildStructuredContentRebuildPayload(row.raw_text);
+      const payload = buildStructuredContentRebuildPayload({
+        rawText: row.raw_text,
+        contentKind: row.content_kind,
+        sourceType: row.source_type,
+        isGeneratedDraft: table === "generated_drafts",
+        existingTitle: row.title,
+        scenarioTitle: row.scenario_title,
+        difficultyLevel: row.difficulty_level,
+      });
 
       await client.query(
         `
           UPDATE ${table}
           SET
-            normalized_text = $2,
-            structured_content = $3::jsonb,
+            title = COALESCE($2, title),
+            normalized_text = $3,
+            structured_content = $4::jsonb,
             updated_at = NOW()
           WHERE id = $1
         `,
-        [row.id, payload.normalizedText, JSON.stringify(payload.structuredContent)],
+        [row.id, payload.rebuiltTitle, payload.normalizedText, JSON.stringify(payload.structuredContent)],
       );
     }
 

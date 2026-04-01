@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type MutableRefObject } from "react";
+import { type MutableRefObject, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GeneratedDraftDetailResponse } from "@/lib/types/api";
 import { levelLabel, playbackModeLabel } from "../../_stage/practice-stage-controller";
 import { PracticeStageFrame } from "../../_stage/practice-stage-frame";
+import { useStageHover } from "../../_stage/use-stage-hover";
 import { usePracticeStagePlayback } from "../../_stage/use-practice-stage-playback";
 
 type GeneratedDraftStageProps = {
@@ -14,12 +15,17 @@ type GeneratedDraftStageProps = {
 export function GeneratedDraftStage({ detail }: GeneratedDraftStageProps) {
   const router = useRouter();
   const { scenario, generatedDraft, structuredContent } = detail;
-  const [hoveredKey, setHoveredKey] = useState<null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const playback = usePracticeStagePlayback({
     structuredContent,
+  });
+  const hover = useStageHover({
+    structuredContent,
+    paragraphRefs: playback.paragraphRefs,
+    sentenceRefs: playback.sentenceRefs,
+    tokenRefs: playback.tokenRefs,
   });
 
   async function saveDraft() {
@@ -92,7 +98,7 @@ export function GeneratedDraftStage({ detail }: GeneratedDraftStageProps) {
         scrollRef: playback.textStageRef,
         visible: true,
         structuredContent,
-        hoveredKey,
+        hoveredKey: hover.hoveredKey,
         playingKey: playback.playingKey,
         currentSentenceKey: playback.currentSentenceKey,
         paragraphRefs: playback.paragraphRefs,
@@ -100,9 +106,12 @@ export function GeneratedDraftStage({ detail }: GeneratedDraftStageProps) {
         tokenRefs: playback.tokenRefs,
         stagePaddingTop: playback.stagePadding.paddingTop,
         stagePaddingBottom: playback.stagePadding.paddingBottom,
-        onPointerMove: () => {},
-        onPointerLeave: () => setHoveredKey(null),
-        onScroll: playback.handleStageScroll,
+        onPointerMove: hover.handlePointerMove,
+        onPointerLeave: hover.clearHover,
+        onScroll: (scrollTop) => {
+          playback.handleStageScroll(scrollTop);
+          hover.scheduleLayoutRefresh();
+        },
         onActivateNode: (key) => void playback.activateNode(key),
         setNodeRef,
       }}

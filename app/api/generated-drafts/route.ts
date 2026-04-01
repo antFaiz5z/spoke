@@ -18,7 +18,10 @@ export async function POST(request: Request) {
       message === "Scenario not found"
         ? 404
         : message === "Generated draft must be English-only" ||
-            message === "Generated draft was empty"
+            message === "Generated draft was empty" ||
+            message === "Generated draft leaked internal model reasoning" ||
+            message === "Generated dialogue must contain at least two dialogue blocks" ||
+            message === "Generated dialogue has too many dialogue blocks"
           ? 422
           : 500;
     return NextResponse.json({ error: message }, { status });

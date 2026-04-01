@@ -48,6 +48,10 @@ type BuildGeneratedDraftTitleInput = {
   difficultyLevel: string;
 };
 
+type FinalizeGeneratedDraftTitleInput = BuildGeneratedDraftTitleInput & {
+  modelTitle: string | null;
+};
+
 function capitalizeContentKind(contentKind: ContentKind): string {
   return contentKind.charAt(0).toUpperCase() + contentKind.slice(1);
 }
@@ -60,14 +64,189 @@ export function buildGeneratedDraftTitle({
   return `${scenarioTitle} ${capitalizeContentKind(contentKind)} Draft (${difficultyLevel})`;
 }
 
-export function validateGeneratedDraftText(text: string): void {
+function stripLeadingLabel(text: string): string {
+  return text.replace(/^[A-Za-z][A-Za-z0-9'()\- ]{0,40}\s*[:：]\s*/, "").trim();
+}
+
+function stripLeadingPromptPhrase(text: string): string {
+  return text
+    .replace(/^tell me about\s+/i, "")
+    .replace(/^can you tell me about\s+/i, "")
+    .replace(/^let'?s talk about\s+/i, "")
+    .trim();
+}
+
+function titleCase(text: string): string {
+  return text
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function buildRebuiltGeneratedDraftTitle({
+  normalizedText,
+  scenarioTitle,
+  contentKind,
+  difficultyLevel,
+}: BuildGeneratedDraftTitleInput & { normalizedText: string }): string {
+  const blocks = normalizedText
+    .split(/\n\s*\n/g)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const contentBlock =
+    blocks.find((block) => !/^(situation|goal|context|task|note|notes|instruction|instructions)\s*:/i.test(block)) ??
+    blocks[0] ??
+    "";
+
+  const words = stripLeadingLabel(contentBlock)
+    .replace(/\?+$/, "")
+    .trim();
+  const candidateText = stripLeadingPromptPhrase(words);
+  const candidateWords = candidateText
+    .replace(/[^\p{L}\p{N}\s'-]+/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (candidateWords.length < 3) {
+    return buildGeneratedDraftTitle({ scenarioTitle, contentKind, difficultyLevel });
+  }
+
+  const meaningfulWords = candidateWords.slice(0, 5).join(" ");
+  return titleCase(`Talking About ${meaningfulWords}`);
+}
+
+export function finalizeGeneratedDraftTitle({
+  scenarioTitle,
+  contentKind,
+  difficultyLevel,
+  modelTitle,
+}: FinalizeGeneratedDraftTitleInput): string {
+  const fallbackTitle = buildGeneratedDraftTitle({
+    scenarioTitle,
+    contentKind,
+    difficultyLevel,
+  });
+
+  const candidate = modelTitle
+    ?.replace(/^Title:\s*/i, "")
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .trim();
+
+  if (!candidate) {
+    return fallbackTitle;
+  }
+
+  if (candidate.includes(":") || /[.?!]$/.test(candidate)) {
+    return fallbackTitle;
+  }
+
+  const wordCount = candidate.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 4 || wordCount > 10) {
+    return fallbackTitle;
+  }
+
+  return candidate;
+}
+
+export function parseGeneratedDraftResponse(text: string): { title: string | null; body: string } {
+  const normalized = normalizeText(stripThinkBlocks(text));
+  const match = normalized.match(/^Title:\s*(.+?)\n+\s*Body:\s*([\s\S]+)$/i);
+
+  if (!match) {
+    return {
+      title: null,
+      body: normalized,
+    };
+  }
+
+  return {
+    title: match[1].trim() || null,
+    body: match[2].trim(),
+  };
+}
+
+export function isDialogueLikeContentKind(contentKind: ContentKind): boolean {
+  return contentKind === "dialogue" || contentKind === "qa" || contentKind === "script";
+}
+
+function stripThinkBlocks(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
+const MAX_DIALOGUE_TURNS = 10;
+
+function countDialogueBlocks(text: string): number {
+  return text
+    .split(/\n\s*\n/g)
+    .map((block) => block.trim())
+    .filter(Boolean).length;
+}
+
+function splitDialogueTurns(text: string): string {
+  let result = text.trim();
+  let previous: string | null = null;
+
+  while (result !== previous) {
+    previous = result;
+    result = result.replace(
+      /([.?!])\s*([A-Za-z][A-Za-z0-9'()\- ]{0,40}\s*[:：])/g,
+      "$1\n$2",
+    );
+    result = result.replace(
+      /([^.?!\n])\s+([A-Za-z][A-Za-z0-9'()\- ]{0,40}\s*[:：])/g,
+      "$1\n$2",
+    );
+  }
+
+  return result;
+}
+
+export function normalizeGeneratedDraftText(text: string, contentKind: ContentKind): string {
+  const normalized = normalizeText(stripThinkBlocks(text));
+  const baseText = isDialogueLikeContentKind(contentKind)
+    ? splitDialogueTurns(normalized)
+    : normalized;
+  const lines = baseText
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^\(\s*/, "").replace(/\s*\)$/, ""));
+
+  return lines.join("\n\n");
+}
+
+export function validateGeneratedDraftText(text: string, contentKind: ContentKind): void {
   if (!text.trim()) {
     throw new Error("Generated draft was empty");
+  }
+
+  if (/<think>[\s\S]*?<\/think>/i.test(text)) {
+    throw new Error("Generated draft leaked internal model reasoning");
   }
 
   if (/\p{Script=Han}/u.test(text)) {
     throw new Error("Generated draft must be English-only");
   }
+
+  if (isDialogueLikeContentKind(contentKind) && countDialogueBlocks(text) < 2) {
+    throw new Error("Generated dialogue must contain at least two dialogue blocks");
+  }
+
+  if (isDialogueLikeContentKind(contentKind) && countDialogueBlocks(text) > MAX_DIALOGUE_TURNS) {
+    throw new Error("Generated dialogue has too many dialogue blocks");
+  }
+}
+
+export function shouldRetryGeneratedDraftValidation(
+  contentKind: ContentKind,
+  message: string,
+): boolean {
+  return (
+    isDialogueLikeContentKind(contentKind) &&
+    message === "Generated dialogue must contain at least two dialogue blocks"
+  );
 }
 
 export function buildInsertGeneratedDraftToStageResponse(
@@ -93,18 +272,44 @@ export async function createGeneratedDraft(
     throw new Error("Scenario not found");
   }
 
-  const generatedText = await generateDraftText({
+  let generatedResponse = await generateDraftText({
     scenarioTitle: scenario.title,
     prompt: input.prompt,
     contentKind: input.contentKind,
     difficultyLevel: input.difficultyLevel,
   });
-  const normalizedText = normalizeText(generatedText);
-  validateGeneratedDraftText(normalizedText);
-  const title = buildGeneratedDraftTitle({
+  let parsedResponse = parseGeneratedDraftResponse(generatedResponse);
+  let normalizedText = normalizeGeneratedDraftText(parsedResponse.body, input.contentKind);
+
+  try {
+    validateGeneratedDraftText(normalizedText, input.contentKind);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const shouldRetry = shouldRetryGeneratedDraftValidation(input.contentKind, message);
+
+    if (!shouldRetry) {
+      throw error;
+    }
+
+    generatedResponse = await generateDraftText(
+      {
+        scenarioTitle: scenario.title,
+        prompt: input.prompt,
+        contentKind: input.contentKind,
+        difficultyLevel: input.difficultyLevel,
+      },
+      { retryForDialogueBlocks: true },
+    );
+    parsedResponse = parseGeneratedDraftResponse(generatedResponse);
+    normalizedText = normalizeGeneratedDraftText(parsedResponse.body, input.contentKind);
+    validateGeneratedDraftText(normalizedText, input.contentKind);
+  }
+
+  const title = finalizeGeneratedDraftTitle({
     scenarioTitle: scenario.title,
     contentKind: input.contentKind,
     difficultyLevel: input.difficultyLevel,
+    modelTitle: parsedResponse.title,
   });
   const structuredContent = buildStructuredContent(normalizedText);
 
@@ -127,7 +332,7 @@ export async function createGeneratedDraft(
     [
       scenario.id,
       title,
-      generatedText,
+      parsedResponse.body,
       normalizedText,
       JSON.stringify(structuredContent),
       input.contentKind,

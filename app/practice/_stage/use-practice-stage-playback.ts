@@ -186,7 +186,7 @@ export function usePracticeStagePlayback({
 
   async function activateNode(key: PracticeNodeKey) {
     const entry = nodeIndex.byKey[key];
-    if (!entry) {
+    if (!entry || !entry.speechText.trim()) {
       return;
     }
 

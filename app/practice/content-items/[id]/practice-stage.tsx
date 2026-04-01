@@ -4,17 +4,16 @@ import { useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useRouter } from "next/navigation";
 import {
   buildPracticeNodeIndex,
-  buildLayoutNodeIndex,
-  buildRectMapFromElements,
-  computeDistanceDrivenHover,
   getParagraphProgressIndex,
   type PracticeNodeKey,
 } from "@/lib/practice";
+import { getGeneratedDraftErrorMessage } from "@/lib/generated-draft-errors";
 import type { ContentItemDetailResponse } from "@/lib/types/api";
 import { DraftStageSurface } from "./draft-stage-surface";
 import { levelLabel, playbackModeLabel } from "../../_stage/practice-stage-controller";
 import { PracticeStageFrame } from "../../_stage/practice-stage-frame";
 import { MinusIcon, PlusIcon } from "../../_stage/stage-icons";
+import { useStageHover } from "../../_stage/use-stage-hover";
 import { usePracticeStagePlayback } from "../../_stage/use-practice-stage-playback";
 
 type PracticeStageProps = {
@@ -32,7 +31,6 @@ export function PracticeStage({ detail }: PracticeStageProps) {
     navigation,
   } = detail;
 
-  const [hoveredKey, setHoveredKey] = useState<PracticeNodeKey | null>(null);
   const [generateDrawerOpen, setGenerateDrawerOpen] = useState(false);
   const [generatePrompt, setGeneratePrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -112,35 +110,19 @@ export function PracticeStage({ detail }: PracticeStageProps) {
     },
   });
 
+  const hover = useStageHover({
+    structuredContent,
+    paragraphRefs: playback.paragraphRefs,
+    sentenceRefs: playback.sentenceRefs,
+    tokenRefs: playback.tokenRefs,
+  });
+
   function setNodeRef(
     map: MutableRefObject<Map<string, HTMLElement>>,
     id: string,
     element: HTMLElement | null,
   ) {
     playback.setNodeRef(map, id, element);
-  }
-
-  function handleTextStagePointerMove(event: React.MouseEvent<HTMLElement>) {
-    if (!playback.textStageRef.current) {
-      return;
-    }
-
-    const result = computeDistanceDrivenHover({
-      pointer: {
-        x: event.clientX,
-        y: event.clientY,
-        insideTextStage: true,
-      },
-      currentHoveredKey: hoveredKey,
-      layout: buildLayoutNodeIndex({
-        structuredContent,
-        paragraphRectsById: buildRectMapFromElements(playback.paragraphRefs.current),
-        sentenceRectsById: buildRectMapFromElements(playback.sentenceRefs.current),
-        tokenRectsById: buildRectMapFromElements(playback.tokenRefs.current),
-      }),
-    });
-
-    setHoveredKey((current) => (current === result.hoveredKey ? current : result.hoveredKey));
   }
 
   async function handleGenerateDraft() {
@@ -175,7 +157,8 @@ export function PracticeStage({ detail }: PracticeStageProps) {
       router.push(`/practice/generated-drafts/${payload.generatedDraftId}`);
       router.refresh();
     } catch (error) {
-      setGenerateError(error instanceof Error ? error.message : "Failed to generate draft");
+      const message = error instanceof Error ? error.message : "Failed to generate draft";
+      setGenerateError(getGeneratedDraftErrorMessage(message));
     } finally {
       setIsGenerating(false);
     }
@@ -199,7 +182,7 @@ export function PracticeStage({ detail }: PracticeStageProps) {
         scrollRef: playback.textStageRef,
         visible: !generateDrawerOpen,
         structuredContent,
-        hoveredKey,
+        hoveredKey: hover.hoveredKey,
         playingKey: playback.playingKey,
         currentSentenceKey: playback.currentSentenceKey,
         paragraphRefs: playback.paragraphRefs,
@@ -207,9 +190,12 @@ export function PracticeStage({ detail }: PracticeStageProps) {
         tokenRefs: playback.tokenRefs,
         stagePaddingTop: playback.stagePadding.paddingTop,
         stagePaddingBottom: playback.stagePadding.paddingBottom,
-        onPointerMove: handleTextStagePointerMove,
-        onPointerLeave: () => setHoveredKey(null),
-        onScroll: playback.handleStageScroll,
+        onPointerMove: hover.handlePointerMove,
+        onPointerLeave: hover.clearHover,
+        onScroll: (scrollTop) => {
+          playback.handleStageScroll(scrollTop);
+          hover.scheduleLayoutRefresh();
+        },
         onActivateNode: (key) => void playback.activateNode(key),
         setNodeRef,
       }}
@@ -222,7 +208,10 @@ export function PracticeStage({ detail }: PracticeStageProps) {
           generatePrompt={generatePrompt}
           generateError={generateError}
           isGenerating={isGenerating}
-          onScroll={playback.handleStageScroll}
+          onScroll={(scrollTop) => {
+            playback.handleStageScroll(scrollTop);
+            hover.scheduleLayoutRefresh();
+          }}
           onClose={() => setGenerateDrawerOpen(false)}
           onPromptChange={setGeneratePrompt}
           onGenerate={handleGenerateDraft}

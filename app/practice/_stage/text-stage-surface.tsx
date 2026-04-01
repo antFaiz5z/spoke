@@ -72,8 +72,11 @@ export function TextStageSurface({
       <div className={STAGE_CARD_STACK_CLASS}>
         {structuredContent.paragraphs.map((paragraph, index) => {
           const paragraphKey = createPracticeNodeKey("paragraph", paragraph.id);
+          const isMetaParagraph = paragraph.paragraphType === "meta";
           const paragraphStateClass =
-            playingKey === paragraphKey
+            isMetaParagraph
+              ? ""
+              : playingKey === paragraphKey
               ? getPlayingStateClass("paragraph")
               : hoveredKey === paragraphKey
                 ? getHoverStateClass("paragraph")
@@ -84,11 +87,11 @@ export function TextStageSurface({
               key={paragraph.id}
               ref={(element) => setNodeRef(paragraphRefs, paragraph.id, element)}
               className={`${STAGE_PARAGRAPH_CARD_BASE_CLASS} ${getParagraphToneClass(index)} ${paragraphStateClass}`}
-              onClick={() => onActivateNode(paragraphKey)}
+              onClick={isMetaParagraph ? undefined : () => onActivateNode(paragraphKey)}
             >
-              {paragraph.speakerLabel ? (
+              {paragraph.speakerLabel || paragraph.metaLabel ? (
                 <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--paragraph)]">
-                  {paragraph.speakerLabel}
+                  {paragraph.speakerLabel ?? paragraph.metaLabel}
                 </p>
               ) : null}
 
@@ -96,7 +99,9 @@ export function TextStageSurface({
                 {paragraph.sentences.map((sentence) => {
                   const sentenceKey = createPracticeNodeKey("sentence", sentence.id);
                   const sentenceStateClass =
-                    playingKey === sentenceKey
+                    isMetaParagraph
+                      ? ""
+                      : playingKey === sentenceKey
                       ? getPlayingStateClass("sentence")
                       : hoveredKey === sentenceKey || currentSentenceKey === sentenceKey
                         ? getHoverStateClass("sentence")
@@ -107,15 +112,21 @@ export function TextStageSurface({
                       key={sentence.id}
                       ref={(element) => setNodeRef(sentenceRefs, sentence.id, element)}
                       className={`${STAGE_SENTENCE_BASE_CLASS} ${sentenceStateClass}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onActivateNode(sentenceKey);
-                      }}
+                      onClick={
+                        isMetaParagraph
+                          ? undefined
+                          : (event) => {
+                              event.stopPropagation();
+                              onActivateNode(sentenceKey);
+                            }
+                      }
                     >
                       {sentence.tokens.map((token) => {
                         const tokenKey = createPracticeNodeKey("token", token.id);
                         const tokenStateClass =
-                          playingKey === tokenKey
+                          isMetaParagraph
+                            ? ""
+                            : playingKey === tokenKey
                             ? getPlayingStateClass("token")
                             : hoveredKey === tokenKey
                               ? getHoverStateClass("token")
@@ -134,7 +145,10 @@ export function TextStageSurface({
                             key={token.id}
                             ref={(element) => setNodeRef(tokenRefs, token.id, element)}
                             type="button"
-                            className={`${STAGE_TOKEN_BASE_CLASS} ${tokenStateClass || "hover:bg-[var(--token)]/10"}`}
+                            className={`${STAGE_TOKEN_BASE_CLASS} ${
+                              tokenStateClass || (isMetaParagraph ? "" : "hover:bg-[var(--token)]/10")
+                            }`}
+                            disabled={isMetaParagraph}
                             onClick={(event) => {
                               event.stopPropagation();
                               onActivateNode(tokenKey);
