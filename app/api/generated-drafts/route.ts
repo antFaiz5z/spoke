@@ -14,7 +14,13 @@ export async function POST(request: Request) {
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create draft";
-    const status = message === "Scenario not found" ? 404 : 500;
+    const status =
+      message === "Scenario not found"
+        ? 404
+        : message === "Generated draft must be English-only" ||
+            message === "Generated draft was empty"
+          ? 422
+          : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

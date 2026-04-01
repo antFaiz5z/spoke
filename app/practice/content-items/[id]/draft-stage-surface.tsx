@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { STAGE_PANEL_STACK_CLASS } from "./stage-layout";
+import { STAGE_PANEL_STACK_CLASS } from "../../_stage/stage-layout";
 
 type DraftStageSurfaceProps = {
   scrollRef: RefObject<HTMLElement | null>;

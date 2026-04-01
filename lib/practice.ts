@@ -9,6 +9,7 @@ export type PracticeNodeEntry = {
   id: string;
   level: HoverLevel;
   text: string;
+  speechText: string;
   paragraphId: string;
   paragraphIndex: number;
   sentenceId: string | null;
@@ -54,6 +55,22 @@ export type HoverEngineResult = {
   hoveredKey: PracticeNodeKey | null;
   reason: HoverReason;
 };
+
+type BuildLayoutNodeIndexInput = {
+  structuredContent: StructuredContent;
+  paragraphRectsById: Map<string, Rect>;
+  sentenceRectsById: Map<string, Rect>;
+  tokenRectsById: Map<string, Rect>;
+};
+
+function expandRect(rect: Rect, padding: number): Rect {
+  return {
+    left: rect.left - padding,
+    top: rect.top - padding,
+    right: rect.right + padding,
+    bottom: rect.bottom + padding,
+  };
+}
 
 export function createSpeechCacheKey(text: string, voiceId: string): string {
   return `speech:${voiceId}:${text.trim()}`;
@@ -123,6 +140,7 @@ export function buildPracticeNodeIndex(
       id: paragraph.id,
       level: "paragraph",
       text: paragraph.text,
+      speechText: paragraph.text,
       paragraphId: paragraph.id,
       paragraphIndex: paragraph.index,
       sentenceId: null,
@@ -135,6 +153,7 @@ export function buildPracticeNodeIndex(
         id: sentence.id,
         level: "sentence",
         text: sentence.text,
+        speechText: sentence.text,
         paragraphId: paragraph.id,
         paragraphIndex: paragraph.index,
         sentenceId: sentence.id,
@@ -147,6 +166,7 @@ export function buildPracticeNodeIndex(
           id: token.id,
           level: "token",
           text: token.text,
+          speechText: token.text,
           paragraphId: paragraph.id,
           paragraphIndex: paragraph.index,
           sentenceId: sentence.id,
@@ -156,6 +176,100 @@ export function buildPracticeNodeIndex(
   }
 
   return { byKey };
+}
+
+export function buildLayoutNodeIndex(input: BuildLayoutNodeIndexInput): LayoutNodeIndex {
+  const { structuredContent, paragraphRectsById, sentenceRectsById, tokenRectsById } = input;
+  const byKey = {} as LayoutNodeIndex["byKey"];
+  const paragraphKeys: PracticeNodeKey[] = [];
+  const sentenceKeys: PracticeNodeKey[] = [];
+  const tokenKeys: PracticeNodeKey[] = [];
+
+  for (const paragraph of structuredContent.paragraphs) {
+    const paragraphRect = paragraphRectsById.get(paragraph.id);
+    if (!paragraphRect) {
+      continue;
+    }
+
+    const paragraphKey = createPracticeNodeKey("paragraph", paragraph.id);
+    byKey[paragraphKey] = {
+      key: paragraphKey,
+      id: paragraph.id,
+      level: "paragraph",
+      contentRect: paragraphRect,
+      hoverZoneRect: expandRect(paragraphRect, 24),
+      exitZoneRect: expandRect(paragraphRect, 36),
+      paragraphId: paragraph.id,
+      sentenceId: null,
+    };
+    paragraphKeys.push(paragraphKey);
+
+    for (const sentence of paragraph.sentences) {
+      const sentenceRect = sentenceRectsById.get(sentence.id);
+      if (!sentenceRect) {
+        continue;
+      }
+
+      const sentenceKey = createPracticeNodeKey("sentence", sentence.id);
+      byKey[sentenceKey] = {
+        key: sentenceKey,
+        id: sentence.id,
+        level: "sentence",
+        contentRect: sentenceRect,
+        hoverZoneRect: expandRect(sentenceRect, 12),
+        exitZoneRect: expandRect(sentenceRect, 24),
+        paragraphId: paragraph.id,
+        sentenceId: sentence.id,
+      };
+      sentenceKeys.push(sentenceKey);
+
+      for (const token of sentence.tokens) {
+        if (token.isPunctuation) {
+          continue;
+        }
+
+        const tokenRect = tokenRectsById.get(token.id);
+        if (!tokenRect) {
+          continue;
+        }
+
+        const tokenKey = createPracticeNodeKey("token", token.id);
+        byKey[tokenKey] = {
+          key: tokenKey,
+          id: token.id,
+          level: "token",
+          contentRect: tokenRect,
+          hoverZoneRect: expandRect(tokenRect, 6),
+          exitZoneRect: expandRect(tokenRect, 14),
+          paragraphId: paragraph.id,
+          sentenceId: sentence.id,
+          isPunctuation: false,
+        };
+        tokenKeys.push(tokenKey);
+      }
+    }
+  }
+
+  return { byKey, paragraphKeys, sentenceKeys, tokenKeys };
+}
+
+export function buildRectMapFromElements(
+  elementsById: Map<string, { getBoundingClientRect: () => Rect | DOMRect }>,
+): Map<string, Rect> {
+  return new Map(
+    Array.from(elementsById.entries()).map(([id, element]) => {
+      const rect = element.getBoundingClientRect();
+      return [
+        id,
+        {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+        },
+      ];
+    }),
+  );
 }
 
 export function getParagraphProgressIndex(

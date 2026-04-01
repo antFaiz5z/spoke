@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit --incremental false",
     "db:init": "tsx scripts/db-init.ts",
     "db:seed:scenarios": "tsx scripts/seed-scenarios.ts",
-    "import:preset": "tsx scripts/import-preset-content.ts"
+    "import:preset": "tsx scripts/import-preset-content.ts",
+    "rebuild:structured-content": "tsx scripts/rebuild-structured-content.ts"
   },
   "dependencies": {
     "next": "^15.3.0",

@@ -7,6 +7,7 @@ Current script:
 - `db-init.ts`
 - `seed-scenarios.ts`
 - `import-preset-content.ts`
+- `rebuild-structured-content.ts`
 
 Usage:
 
@@ -15,6 +16,8 @@ npm run db:init
 npm run db:seed:scenarios
 npm run import:preset -- ./path/to/input.json --dry-run
 npm run import:preset -- ./path/to/input.json --apply
+npm run rebuild:structured-content -- --dry-run
+npm run rebuild:structured-content -- --apply --target all
 ```
 
 Input format:

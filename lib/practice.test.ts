@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildLayoutNodeIndex,
   buildPracticeNodeIndex,
+  buildRectMapFromElements,
   computeDistanceDrivenHover,
   createPracticeNodeKey,
   createSpeechCacheKey,
@@ -66,7 +68,9 @@ test("buildPracticeNodeIndex flattens paragraph, sentence, and token nodes", () 
   const index = buildPracticeNodeIndex(structuredContent);
 
   assert.equal(index.byKey["paragraph:p1"].text, "Tell me about yourself.");
+  assert.equal(index.byKey["paragraph:p1"].speechText, "Tell me about yourself.");
   assert.equal(index.byKey["sentence:s1"].sentenceId, "s1");
+  assert.equal(index.byKey["sentence:s1"].speechText, "Tell me about yourself.");
   assert.equal(index.byKey["token:t1"].paragraphId, "p1");
   assert.equal(index.byKey["token:t2"].text, ".");
 });
@@ -175,6 +179,48 @@ test("computeDistanceDrivenHover prefers token over sentence and paragraph when 
 
   assert.equal(result.hoveredKey, "token:t1");
   assert.equal(result.reason, "token-hit");
+});
+
+test("buildLayoutNodeIndex builds paragraph, sentence, and token hit zones from measured rects", () => {
+  const layout = buildLayoutNodeIndex({
+    structuredContent,
+    paragraphRectsById: new Map([
+      ["p1", { left: 100, top: 100, right: 500, bottom: 260 }],
+    ]),
+    sentenceRectsById: new Map([
+      ["s1", { left: 130, top: 130, right: 470, bottom: 190 }],
+    ]),
+    tokenRectsById: new Map([
+      ["t1", { left: 155, top: 138, right: 205, bottom: 176 }],
+    ]),
+  });
+
+  assert.equal(layout.paragraphKeys[0], "paragraph:p1");
+  assert.equal(layout.sentenceKeys[0], "sentence:s1");
+  assert.equal(layout.tokenKeys[0], "token:t1");
+  assert.equal(layout.byKey["paragraph:p1"]?.hoverZoneRect.left, 76);
+  assert.equal(layout.byKey["sentence:s1"]?.hoverZoneRect.left, 118);
+  assert.equal(layout.byKey["token:t1"]?.hoverZoneRect.left, 149);
+});
+
+test("buildRectMapFromElements converts element rects into a rect map", () => {
+  const element = {
+    getBoundingClientRect: () => ({
+      left: 10,
+      top: 20,
+      right: 30,
+      bottom: 40,
+    }),
+  } as HTMLElement;
+
+  const rects = buildRectMapFromElements(new Map([["p1", element]]));
+
+  assert.deepEqual(rects.get("p1"), {
+    left: 10,
+    top: 20,
+    right: 30,
+    bottom: 40,
+  });
 });
 
 test("computeDistanceDrivenHover falls back to sentence when pointer leaves token but stays in sentence zone", () => {

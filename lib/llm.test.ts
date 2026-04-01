@@ -20,6 +20,9 @@ test("buildGeneratedDraftMessages builds a constrained generation prompt", () =>
 
   assert.equal(messages[0]?.role, "system");
   assert.match(messages[0]?.content ?? "", /English speaking practice/);
+  assert.match(messages[0]?.content ?? "", /English only/i);
+  assert.match(messages[0]?.content ?? "", /no Chinese/i);
+  assert.match(messages[0]?.content ?? "", /Do not add a title/i);
   assert.equal(messages[1]?.role, "user");
   assert.match(messages[1]?.content ?? "", /Job Interview/);
   assert.match(messages[1]?.content ?? "", /dialogue/);

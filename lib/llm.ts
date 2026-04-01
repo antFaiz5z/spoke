@@ -36,7 +36,7 @@ export function buildGeneratedDraftMessages(input: CreateDraftInput): ChatMessag
     {
       role: "system",
       content:
-        "You generate concise English speaking practice materials. Return only the practice text, with no commentary, no markdown, and no labels outside the requested content.",
+        "You generate concise English speaking practice materials. Output English only. No Chinese. No translations. No bilingual lines. No commentary. No markdown. No labels outside the requested content. Do not add a title or heading. Return only the practice text itself.",
     },
     {
       role: "user",

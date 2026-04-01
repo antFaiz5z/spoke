@@ -9,6 +9,7 @@ import type {
 import type { StructuredContent } from "@/lib/types/content";
 import { buildStructuredContent, normalizeText } from "@/lib/content-processing";
 import { generateDraftText } from "@/lib/llm";
+import type { ContentKind } from "@/lib/types/content";
 
 type ScenarioRow = {
   id: string;
@@ -41,6 +42,34 @@ type InsertedDraftRow = {
   id: string;
 };
 
+type BuildGeneratedDraftTitleInput = {
+  scenarioTitle: string;
+  contentKind: ContentKind;
+  difficultyLevel: string;
+};
+
+function capitalizeContentKind(contentKind: ContentKind): string {
+  return contentKind.charAt(0).toUpperCase() + contentKind.slice(1);
+}
+
+export function buildGeneratedDraftTitle({
+  scenarioTitle,
+  contentKind,
+  difficultyLevel,
+}: BuildGeneratedDraftTitleInput): string {
+  return `${scenarioTitle} ${capitalizeContentKind(contentKind)} Draft (${difficultyLevel})`;
+}
+
+export function validateGeneratedDraftText(text: string): void {
+  if (!text.trim()) {
+    throw new Error("Generated draft was empty");
+  }
+
+  if (/\p{Script=Han}/u.test(text)) {
+    throw new Error("Generated draft must be English-only");
+  }
+}
+
 export function buildInsertGeneratedDraftToStageResponse(
   id: string,
 ): InsertGeneratedDraftToStageResponse {
@@ -71,7 +100,12 @@ export async function createGeneratedDraft(
     difficultyLevel: input.difficultyLevel,
   });
   const normalizedText = normalizeText(generatedText);
-  const title = normalizedText.split(/\n/)[0]?.slice(0, 80) || "Generated draft";
+  validateGeneratedDraftText(normalizedText);
+  const title = buildGeneratedDraftTitle({
+    scenarioTitle: scenario.title,
+    contentKind: input.contentKind,
+    difficultyLevel: input.difficultyLevel,
+  });
   const structuredContent = buildStructuredContent(normalizedText);
 
   const insertResult = await pool.query<GeneratedDraftInsertRow>(

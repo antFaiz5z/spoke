@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { STAGE_SHELL_CLASS } from "./stage-layout";
 
 type StageHeaderProps = {
@@ -12,6 +12,7 @@ type StageHeaderProps = {
   farthestParagraphIndex: number;
   currentSentenceIndex: number;
   sentenceCount: number;
+  aside?: ReactNode;
 };
 
 export function StageHeader({
@@ -25,6 +26,7 @@ export function StageHeader({
   farthestParagraphIndex,
   currentSentenceIndex,
   sentenceCount,
+  aside,
 }: StageHeaderProps) {
   return (
     <header
@@ -37,7 +39,7 @@ export function StageHeader({
         className="border-b border-[rgba(216,199,162,0.65)] bg-[color:rgba(255,250,240,0.92)] shadow-[0_14px_36px_rgba(60,35,10,0.08)] backdrop-blur-xl"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className={`${STAGE_SHELL_CLASS} flex flex-wrap items-start justify-between gap-5 py-4`}>
+        <div className={`${STAGE_SHELL_CLASS} flex flex-wrap items-end justify-between gap-5 py-4`}>
           <div className="max-w-3xl">
             <a
               href={`/scenarios/${scenarioSlug}`}
@@ -55,12 +57,16 @@ export function StageHeader({
             <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">{title}</h1>
           </div>
 
-          <div className="min-w-56 rounded-[1.25rem] border border-[var(--border)]/80 bg-white/55 px-4 py-3 text-sm text-black/65">
-            <p>Resume paragraph {farthestParagraphIndex + 1}</p>
-            <p className="mt-1 text-xs uppercase tracking-[0.14em] text-black/45">
-              Sentence {currentSentenceIndex >= 0 ? currentSentenceIndex + 1 : 1} /{" "}
-              {Math.max(sentenceCount, 1)}
-            </p>
+          <div className="self-end">
+            {aside ?? (
+              <div className="min-w-56 rounded-[1.25rem] border border-[var(--border)]/80 bg-white/55 px-4 py-3 text-sm text-black/65">
+                <p>Resume paragraph {farthestParagraphIndex + 1}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.14em] text-black/45">
+                  Sentence {currentSentenceIndex >= 0 ? currentSentenceIndex + 1 : 1} /{" "}
+                  {Math.max(sentenceCount, 1)}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
