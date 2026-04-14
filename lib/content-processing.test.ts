@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildStructuredContent } from "@/lib/content-processing";
+import { buildStructuredContent, normalizeText } from "@/lib/content-processing";
+
+test("normalizeText normalizes line endings, trims line whitespace, and collapses repeated blank lines", () => {
+  assert.equal(
+    normalizeText("  Interviewer: Hello there.\r\n\r\n\r\n Candidate: Hi.  \r\n  "),
+    "Interviewer: Hello there.\n\nCandidate: Hi.",
+  );
+});
 
 test("buildStructuredContent extracts speakerLabel and keeps spoken text for dialogue lines", () => {
   const content = buildStructuredContent(
@@ -49,4 +56,31 @@ test("buildStructuredContent splits multi-sentence paragraphs and punctuation to
     ["I", "build", "mobile", "products", "."],
   );
   assert.equal(content.paragraphs[0]?.sentences[0]?.tokens[4]?.isPunctuation, true);
+});
+
+test("buildStructuredContent keeps abbreviation-led sentences together", () => {
+  const content = buildStructuredContent(
+    "Interviewer: Mr. Smith is here. Please start the interview.",
+  );
+
+  assert.equal(content.paragraphs[0]?.sentences.length, 2);
+  assert.equal(content.paragraphs[0]?.sentences[0]?.text, "Mr. Smith is here.");
+  assert.equal(content.paragraphs[0]?.sentences[1]?.text, "Please start the interview.");
+});
+
+test("buildStructuredContent offsets align with the normalized source text", () => {
+  const text = normalizeText("Interviewer: Hello there.\n\nCandidate: I'm ready.");
+  const content = buildStructuredContent(text);
+
+  for (const paragraph of content.paragraphs) {
+    assert.equal(text.slice(paragraph.startOffset, paragraph.endOffset), paragraph.text);
+
+    for (const sentence of paragraph.sentences) {
+      assert.equal(text.slice(sentence.startOffset, sentence.endOffset), sentence.text);
+
+      for (const token of sentence.tokens) {
+        assert.equal(text.slice(token.startOffset, token.endOffset), token.text);
+      }
+    }
+  }
 });

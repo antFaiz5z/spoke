@@ -15,8 +15,10 @@ export function getEnv(key: RequiredEnvKey): string {
 
 export const appEnv = {
   databaseUrl: readEnv("DATABASE_URL"),
+  openAiProvider: readEnv("OPENAI_PROVIDER"),
   openAiApiBaseUrl: readEnv("OPENAI_API_BASE_URL"),
   openAiApiKey: readEnv("OPENAI_API_KEY"),
+  ttsProvider: readEnv("TTS_PROVIDER"),
   ttsApiBaseUrl: readEnv("TTS_API_BASE_URL"),
   ttsApiKey: readEnv("TTS_API_KEY"),
 };

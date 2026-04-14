@@ -12,11 +12,60 @@ const META_LABELS = new Set([
 ]);
 
 export function normalizeText(input: string): string {
-  return input.replace(/\r\n/g, "\n").trim();
+  return input
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 const SENTENCE_PATTERN = /[^.!?]+[.!?]+(?:["')\]]+)?|[^.!?]+$/g;
 const TOKEN_PATTERN = /[\p{L}\p{N}]+(?:['-][\p{L}\p{N}]+)*|[^\s\p{L}\p{N}]/gu;
+const NON_TERMINATING_ABBREVIATIONS = new Set([
+  "mr.",
+  "mrs.",
+  "ms.",
+  "dr.",
+  "prof.",
+  "sr.",
+  "jr.",
+  "st.",
+  "vs.",
+  "etc.",
+]);
+
+function splitSentences(text: string) {
+  const rawMatches = Array.from(text.matchAll(SENTENCE_PATTERN));
+  const matches =
+    rawMatches.length > 0
+      ? rawMatches.map((match) => ({
+          text: match[0],
+          index: match.index ?? 0,
+        }))
+      : [{ text, index: 0 }];
+  const sentences: Array<{ text: string; index: number }> = [];
+
+  for (const match of matches) {
+    const sentenceText = match.text.trim();
+    if (!sentenceText) {
+      continue;
+    }
+
+    const previous = sentences[sentences.length - 1];
+    if (previous && NON_TERMINATING_ABBREVIATIONS.has(previous.text.trim().toLowerCase())) {
+      previous.text = `${previous.text} ${sentenceText}`;
+      continue;
+    }
+
+    sentences.push({
+      text: sentenceText,
+      index: match.index,
+    });
+  }
+
+  return sentences;
+}
 
 function parseParagraphPrefix(paragraphText: string) {
   const match = paragraphText.match(/^\(?\s*([A-Za-z][A-Za-z0-9'()\- ]{0,40})\s*[:：]\s*(.+?)\)?$/s);
@@ -74,13 +123,10 @@ export function buildStructuredContent(text: string): StructuredContent {
     const { paragraphType, metaLabel, speakerId, speakerLabel, contentText, contentOffset } =
       parseParagraphPrefix(paragraphText);
     const paragraphContentStart = paragraphStart + contentOffset;
-    const sentenceMatches = Array.from(contentText.matchAll(SENTENCE_PATTERN));
-    const sentences = (sentenceMatches.length > 0
-      ? sentenceMatches
-      : [{ 0: contentText, index: 0 }] as Array<{ 0: string; index?: number }>)
-      .map((match, sentenceIndex) => {
-        const sentenceText = match[0].trim();
-        const localSentenceStart = contentText.indexOf(sentenceText, match.index ?? 0);
+    const sentenceMatches = splitSentences(contentText);
+    const sentences = sentenceMatches.map((match, sentenceIndex) => {
+        const sentenceText = match.text;
+        const localSentenceStart = contentText.indexOf(sentenceText, match.index);
         const sentenceStart = paragraphContentStart + Math.max(localSentenceStart, 0);
         const sentenceEnd = sentenceStart + sentenceText.length;
         const tokenMatches = Array.from(sentenceText.matchAll(TOKEN_PATTERN));

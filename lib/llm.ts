@@ -1,4 +1,5 @@
 import { appEnv } from "@/lib/env";
+import { requestOpenAiCompatibleGeneration } from "@/lib/providers/openai-compatible-llm";
 import type { ContentKind } from "@/lib/types/content";
 
 type ChatMessage = {
@@ -17,15 +18,20 @@ type BuildGeneratedDraftMessagesOptions = {
   retryForDialogueBlocks?: boolean;
 };
 
-type OpenAiCompatibleResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string | null;
-    } | null;
-  }>;
-};
-
 const DEFAULT_OPENAI_API_BASE_URL = "https://api.minimax.chat/v1";
+const DEFAULT_OPENAI_PROVIDER = "openai-compatible";
+
+type GenerationProvider = "openai-compatible";
+
+function getGenerationProvider(): GenerationProvider {
+  const provider = (appEnv.openAiProvider || DEFAULT_OPENAI_PROVIDER).trim();
+
+  if (provider !== "openai-compatible") {
+    throw new Error(`Unsupported generation provider: ${provider}`);
+  }
+
+  return provider;
+}
 
 export function getGenerationModelForKind(contentKind: ContentKind): string {
   if (contentKind === "dialogue") {
@@ -91,29 +97,19 @@ export async function generateDraftText(
   }
 
   const apiBaseUrl = appEnv.openAiApiBaseUrl || DEFAULT_OPENAI_API_BASE_URL;
-  const response = await fetch(`${apiBaseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  const provider = getGenerationProvider();
+
+  if (provider === "openai-compatible") {
+    return requestOpenAiCompatibleGeneration({
+      config: {
+        apiBaseUrl,
+        apiKey,
+      },
       model: getGenerationModelForKind(input.contentKind),
       messages: buildGeneratedDraftMessages(input, options),
       temperature: 0.7,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Generation request failed with status ${response.status}`);
+    });
   }
 
-  const payload = (await response.json()) as OpenAiCompatibleResponse;
-  const text = payload.choices?.[0]?.message?.content?.trim();
-
-  if (!text) {
-    throw new Error("Generation response did not contain content");
-  }
-
-  return text;
+  throw new Error(`Unsupported generation provider: ${provider}`);
 }

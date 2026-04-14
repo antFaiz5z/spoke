@@ -1,4 +1,9 @@
-import type { ContentKind, SourceType, StructuredContent } from "@/lib/types/content";
+import type {
+  ContentKind,
+  SourceType,
+  StructuredContent,
+  TranslationBundle,
+} from "@/lib/types/content";
 
 export type ReadProgress = {
   readCount: number;
@@ -55,6 +60,7 @@ export type ContentItemDetailResponse = {
     status: string;
   };
   structuredContent: StructuredContent;
+  translationBundle: TranslationBundle | null;
   articleProgress: {
     farthestParagraphIndex: number;
     lastReadAt: string | null;
@@ -81,11 +87,12 @@ export type GeneratedDraftDetailResponse = {
     title: string;
     contentKind: ContentKind;
     difficultyLevel: string;
-    status: string;
+    status: "created" | "ready" | "saved" | "discarded";
     insertedToStage: boolean;
     savedContentItemId: string | null;
   };
   structuredContent: StructuredContent;
+  translationBundle: TranslationBundle | null;
 };
 
 export type CreateGeneratedDraftRequest = {
@@ -129,6 +136,12 @@ export type UpdateProgressResponse = {
 export type SaveGeneratedDraftResponse = {
   generatedDraftId: string;
   savedContentItemId: string;
+};
+
+export type DiscardGeneratedDraftResponse = {
+  generatedDraftId: string;
+  status: "discarded";
+  discarded: true;
 };
 
 export type SynthesizeSpeechRequest = {

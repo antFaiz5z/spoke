@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getGeneratedDraftErrorMessage } from "@/lib/generated-draft-errors";
 import {
+  buildDiscardGeneratedDraftResponse,
   buildGeneratedDraftTitle,
   buildRebuiltGeneratedDraftTitle,
   buildInsertGeneratedDraftToStageResponse,
@@ -16,6 +17,14 @@ test("buildInsertGeneratedDraftToStageResponse returns an inserted draft lifecyc
   assert.deepEqual(buildInsertGeneratedDraftToStageResponse("gd_001"), {
     generatedDraftId: "gd_001",
     insertedToStage: true,
+  });
+});
+
+test("buildDiscardGeneratedDraftResponse returns a discarded draft lifecycle payload", () => {
+  assert.deepEqual(buildDiscardGeneratedDraftResponse("gd_001"), {
+    generatedDraftId: "gd_001",
+    status: "discarded",
+    discarded: true,
   });
 });
 
