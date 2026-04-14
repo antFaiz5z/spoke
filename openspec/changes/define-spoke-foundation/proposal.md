@@ -7,7 +7,6 @@
 本次变更在实现前先固定 V1 方向：
 
 - `spoke` 是一个以文本片段为中心的练习产品
-- `OpenWebUI` 是辅助控制面，不是主用户界面
 - 前端采用 `Next.js + React`
 - 样式方案优先采用 `Tailwind CSS`
 - 后端优先采用 `TypeScript`，V1 使用 `Next.js Route Handlers`
@@ -31,7 +30,6 @@
 本次变更定义：
 
 - 产品定位
-- `spoke` 与 `OpenWebUI` 的架构边界
 - V1 前端框架选型
 - V1 内容模型
 - V1 数据库策略
@@ -59,17 +57,6 @@
 - 词元
 
 它不被定义为聊天优先产品。
-
-### OpenWebUI 边界
-
-`OpenWebUI` 可以临时用于：
-
-- 模型配置
-- OpenAI 兼容供应商接入
-- prompt 调试
-- 内部测试
-
-`OpenWebUI` 不是主产品 UI。
 
 ### 前端
 
@@ -115,7 +102,5 @@ V1 中：
 在本次变更之后，后续实现可以基于稳定基础推进，而不必反复重议以下问题：
 
 - 产品究竟是 chat-first 还是 text-first
-- `OpenWebUI` 是核心还是辅助
 - 主数据库用 SQLite 还是 PostgreSQL
 - V1 是否要把段 / 句 / 词全部规范化成独立数据表
-

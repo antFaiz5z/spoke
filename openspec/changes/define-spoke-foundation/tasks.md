@@ -55,7 +55,6 @@
 
 ## 5. 集成边界
 
-- [x] 明确 `OpenWebUI` 的临时角色
 - [x] 定义 OpenAI 兼容模型与 TTS 接入的 provider 边界
 - 当前 LLM 与 TTS 已通过 provider 选择器进入独立适配层；V1 默认使用 `openai-compatible` 与 `minimax`，业务层不再直接拼装供应商协议。
 
