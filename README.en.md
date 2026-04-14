@@ -150,7 +150,7 @@ Not yet implemented as full user-facing features:
 
 ## Related Docs
 
-- Foundation proposal: [openspec/changes/define-spoke-foundation/proposal.md](/Users/staff_qm/projects/learning/spoke/openspec/changes/define-spoke-foundation/proposal.md)
-- Foundation design: [openspec/changes/define-spoke-foundation/design.md](/Users/staff_qm/projects/learning/spoke/openspec/changes/define-spoke-foundation/design.md)
-- Database notes: [db/README.md](/Users/staff_qm/projects/learning/spoke/db/README.md)
-- Script notes: [scripts/README.md](/Users/staff_qm/projects/learning/spoke/scripts/README.md)
+- Foundation proposal: `openspec/changes/define-spoke-foundation/proposal.md`
+- Foundation design: `openspec/changes/define-spoke-foundation/design.md`
+- Database notes: `db/README.md`
+- Script notes: `scripts/README.md`

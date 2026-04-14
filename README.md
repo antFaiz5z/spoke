@@ -1,6 +1,6 @@
 # Spoke
 
-默认文档语言为中文。English version: [README.en.md](/Users/staff_qm/projects/learning/spoke/README.en.md)
+默认文档语言为中文。English version: `README.en.md`
 
 Spoke 是一个以文本片段为中心的英语口语练习工作台。
 
@@ -154,8 +154,8 @@ npm run rebuild:structured-content -- --apply --target all
 
 ## 相关文档
 
-- 英文版说明：[README.en.md](/Users/staff_qm/projects/learning/spoke/README.en.md)
-- Foundation 提案：[openspec/changes/define-spoke-foundation/proposal.md](/Users/staff_qm/projects/learning/spoke/openspec/changes/define-spoke-foundation/proposal.md)
-- Foundation 设计：[openspec/changes/define-spoke-foundation/design.md](/Users/staff_qm/projects/learning/spoke/openspec/changes/define-spoke-foundation/design.md)
-- 数据库说明：[db/README.md](/Users/staff_qm/projects/learning/spoke/db/README.md)
-- 脚本说明：[scripts/README.md](/Users/staff_qm/projects/learning/spoke/scripts/README.md)
+- 英文版说明：`README.en.md`
+- Foundation 提案：`openspec/changes/define-spoke-foundation/proposal.md`
+- Foundation 设计：`openspec/changes/define-spoke-foundation/design.md`
+- 数据库说明：`db/README.md`
+- 脚本说明：`scripts/README.md`
