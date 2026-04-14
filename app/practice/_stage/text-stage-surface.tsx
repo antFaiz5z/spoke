@@ -2,10 +2,9 @@ import type { MutableRefObject, RefObject } from "react";
 import { createPracticeNodeKey, type PracticeNodeKey } from "@/lib/practice";
 import type { StructuredContent } from "@/lib/types/content";
 import { STAGE_CARD_STACK_CLASS } from "./stage-layout";
+import { resolveHighlightStateClass } from "./highlight-layer";
 import {
-  getHoverStateClass,
   getParagraphToneClass,
-  getPlayingStateClass,
   STAGE_PARAGRAPH_CARD_BASE_CLASS,
   STAGE_SENTENCE_BASE_CLASS,
   STAGE_TOKEN_BASE_CLASS,
@@ -73,14 +72,13 @@ export function TextStageSurface({
         {structuredContent.paragraphs.map((paragraph, index) => {
           const paragraphKey = createPracticeNodeKey("paragraph", paragraph.id);
           const isMetaParagraph = paragraph.paragraphType === "meta";
-          const paragraphStateClass =
-            isMetaParagraph
-              ? ""
-              : playingKey === paragraphKey
-              ? getPlayingStateClass("paragraph")
-              : hoveredKey === paragraphKey
-                ? getHoverStateClass("paragraph")
-                : "";
+          const paragraphStateClass = resolveHighlightStateClass({
+            isMetaParagraph,
+            hoveredKey,
+            playingKey,
+            targetKey: paragraphKey,
+            level: "paragraph",
+          });
 
           return (
             <article
@@ -98,14 +96,14 @@ export function TextStageSurface({
               <div className="flex flex-wrap gap-x-2 gap-y-3 text-xl leading-[1.9] text-black/90 sm:text-2xl sm:leading-[1.8]">
                 {paragraph.sentences.map((sentence) => {
                   const sentenceKey = createPracticeNodeKey("sentence", sentence.id);
-                  const sentenceStateClass =
-                    isMetaParagraph
-                      ? ""
-                      : playingKey === sentenceKey
-                      ? getPlayingStateClass("sentence")
-                      : hoveredKey === sentenceKey || currentSentenceKey === sentenceKey
-                        ? getHoverStateClass("sentence")
-                        : "";
+                  const sentenceStateClass = resolveHighlightStateClass({
+                    isMetaParagraph,
+                    hoveredKey,
+                    playingKey,
+                    currentSentenceKey,
+                    targetKey: sentenceKey,
+                    level: "sentence",
+                  });
 
                   return (
                     <span
@@ -123,14 +121,13 @@ export function TextStageSurface({
                     >
                       {sentence.tokens.map((token) => {
                         const tokenKey = createPracticeNodeKey("token", token.id);
-                        const tokenStateClass =
-                          isMetaParagraph
-                            ? ""
-                            : playingKey === tokenKey
-                            ? getPlayingStateClass("token")
-                            : hoveredKey === tokenKey
-                              ? getHoverStateClass("token")
-                              : "";
+                        const tokenStateClass = resolveHighlightStateClass({
+                          isMetaParagraph,
+                          hoveredKey,
+                          playingKey,
+                          targetKey: tokenKey,
+                          level: "token",
+                        });
 
                         if (token.isPunctuation) {
                           return (

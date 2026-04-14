@@ -13,7 +13,7 @@ import { DraftStageSurface } from "./draft-stage-surface";
 import { levelLabel, playbackModeLabel } from "../../_stage/practice-stage-controller";
 import { PracticeStageFrame } from "../../_stage/practice-stage-frame";
 import { MinusIcon, PlusIcon } from "../../_stage/stage-icons";
-import { useStageHover } from "../../_stage/use-stage-hover";
+import { useHoverEngine } from "../../_stage/hover-engine";
 import { usePracticeStagePlayback } from "../../_stage/use-practice-stage-playback";
 
 type PracticeStageProps = {
@@ -110,7 +110,7 @@ export function PracticeStage({ detail }: PracticeStageProps) {
     },
   });
 
-  const hover = useStageHover({
+  const hover = useHoverEngine({
     structuredContent,
     paragraphRefs: playback.paragraphRefs,
     sentenceRefs: playback.sentenceRefs,

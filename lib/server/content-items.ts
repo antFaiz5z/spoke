@@ -105,6 +105,7 @@ export async function getContentItemDetail(
       status: row.content_status,
     },
     structuredContent: row.structured_content,
+    translationBundle: null,
     articleProgress: {
       farthestParagraphIndex: row.farthest_paragraph_index ?? 0,
       lastReadAt: row.progress_last_read_at

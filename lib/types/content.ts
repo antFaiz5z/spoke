@@ -7,6 +7,16 @@ export type StructuredContent = {
   paragraphs: ParagraphNode[];
 };
 
+export type SentenceTranslation = {
+  sentenceId: string;
+  text: string;
+};
+
+export type TranslationBundle = {
+  language: string;
+  sentenceTranslations: SentenceTranslation[];
+};
+
 export type ParagraphType = "spoken" | "meta";
 
 export type ParagraphNode = {

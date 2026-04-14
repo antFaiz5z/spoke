@@ -1,11 +1,11 @@
 "use client";
 
-import { type MutableRefObject, useState } from "react";
+import { type MutableRefObject, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GeneratedDraftDetailResponse } from "@/lib/types/api";
 import { levelLabel, playbackModeLabel } from "../../_stage/practice-stage-controller";
 import { PracticeStageFrame } from "../../_stage/practice-stage-frame";
-import { useStageHover } from "../../_stage/use-stage-hover";
+import { useHoverEngine } from "../../_stage/hover-engine";
 import { usePracticeStagePlayback } from "../../_stage/use-practice-stage-playback";
 
 type GeneratedDraftStageProps = {
@@ -17,16 +17,28 @@ export function GeneratedDraftStage({ detail }: GeneratedDraftStageProps) {
   const { scenario, generatedDraft, structuredContent } = detail;
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isDiscarding, setIsDiscarding] = useState(false);
+  const [discardError, setDiscardError] = useState<string | null>(null);
 
   const playback = usePracticeStagePlayback({
     structuredContent,
   });
-  const hover = useStageHover({
+  const hover = useHoverEngine({
     structuredContent,
     paragraphRefs: playback.paragraphRefs,
     sentenceRefs: playback.sentenceRefs,
     tokenRefs: playback.tokenRefs,
   });
+
+  useEffect(() => {
+    if (generatedDraft.insertedToStage || generatedDraft.status === "discarded") {
+      return;
+    }
+
+    void fetch(`/api/generated-drafts/${generatedDraft.id}/insert-to-stage`, {
+      method: "POST",
+    });
+  }, [generatedDraft.id, generatedDraft.insertedToStage, generatedDraft.status]);
 
   async function saveDraft() {
     setIsSaving(true);
@@ -49,6 +61,29 @@ export function GeneratedDraftStage({ detail }: GeneratedDraftStageProps) {
       setSaveError(error instanceof Error ? error.message : "Failed to save generated draft");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function discardDraft() {
+    setIsDiscarding(true);
+    setDiscardError(null);
+
+    try {
+      const response = await fetch(`/api/generated-drafts/${generatedDraft.id}/discard`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error || "Failed to discard generated draft");
+      }
+
+      router.push(`/scenarios/${scenario.slug}`);
+      router.refresh();
+    } catch (error) {
+      setDiscardError(error instanceof Error ? error.message : "Failed to discard generated draft");
+    } finally {
+      setIsDiscarding(false);
     }
   }
 
@@ -80,17 +115,37 @@ export function GeneratedDraftStage({ detail }: GeneratedDraftStageProps) {
               <button
                 type="button"
                 onClick={saveDraft}
-                disabled={isSaving}
+                disabled={isSaving || generatedDraft.status === "discarded"}
                 className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                  isSaving
+                  isSaving || generatedDraft.status === "discarded"
                     ? "cursor-progress border-black/10 text-black/30"
                     : "border-[var(--border)] bg-[var(--surface)] text-black/75 hover:bg-white"
                 }`}
               >
                 {isSaving ? "Saving..." : "Save to scenario"}
               </button>
+
+              <button
+                type="button"
+                onClick={discardDraft}
+                disabled={
+                  isDiscarding ||
+                  generatedDraft.status === "saved" ||
+                  generatedDraft.status === "discarded"
+                }
+                className={`rounded-full border px-4 py-2 text-sm font-medium ${
+                  isDiscarding ||
+                  generatedDraft.status === "saved" ||
+                  generatedDraft.status === "discarded"
+                    ? "cursor-not-allowed border-black/10 text-black/30"
+                    : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                }`}
+              >
+                {isDiscarding ? "Discarding..." : "Discard draft"}
+              </button>
             </div>
             {saveError ? <p className="mt-2 text-sm text-red-700">{saveError}</p> : null}
+            {discardError ? <p className="mt-2 text-sm text-red-700">{discardError}</p> : null}
           </div>
         ),
       }}

@@ -4,18 +4,35 @@ import type { HoverLevel, HoverReason } from "@/lib/types/runtime";
 export type PracticeNodeKey = `${HoverLevel}:${string}`;
 export type PlaybackStatus = "idle" | "loading" | "playing" | "error";
 
-export type PracticeNodeEntry = {
+export type HoverCandidateNode = {
   key: PracticeNodeKey;
   id: string;
   level: HoverLevel;
   text: string;
-  speechText: string;
+  startOffset: number;
+  endOffset: number;
+  index: number;
   paragraphId: string;
   paragraphIndex: number;
   sentenceId: string | null;
+  isPunctuation?: boolean;
+};
+
+export type HoverCandidateIndex = {
+  paragraphs: HoverCandidateNode[];
+  sentences: HoverCandidateNode[];
+  tokens: HoverCandidateNode[];
+  byKey: Record<PracticeNodeKey, HoverCandidateNode>;
+};
+
+export type PracticeNodeEntry = HoverCandidateNode & {
+  speechText: string;
 };
 
 export type PracticeNodeIndex = {
+  paragraphs: PracticeNodeEntry[];
+  sentences: PracticeNodeEntry[];
+  tokens: PracticeNodeEntry[];
   byKey: Record<PracticeNodeKey, PracticeNodeEntry>;
 };
 
@@ -53,7 +70,10 @@ export type LayoutNodeIndex = {
 
 export type HoverEngineResult = {
   hoveredKey: PracticeNodeKey | null;
+  hoveredLevel: HoverLevel | null;
   reason: HoverReason;
+  fromLevel: HoverLevel | null;
+  toLevel: HoverLevel | null;
 };
 
 type BuildLayoutNodeIndexInput = {
@@ -132,51 +152,83 @@ export function buildPracticeNodeIndex(
   structuredContent: StructuredContent,
 ): PracticeNodeIndex {
   const byKey = {} as Record<PracticeNodeKey, PracticeNodeEntry>;
+  const paragraphs: PracticeNodeEntry[] = [];
+  const sentences: PracticeNodeEntry[] = [];
+  const tokens: PracticeNodeEntry[] = [];
 
   for (const paragraph of structuredContent.paragraphs) {
     const paragraphKey = createPracticeNodeKey("paragraph", paragraph.id);
     const paragraphIsPlayable = paragraph.paragraphType !== "meta";
-    byKey[paragraphKey] = {
+    const paragraphEntry: PracticeNodeEntry = {
       key: paragraphKey,
       id: paragraph.id,
       level: "paragraph",
       text: paragraph.text,
+      startOffset: paragraph.startOffset,
+      endOffset: paragraph.endOffset,
+      index: paragraph.index,
       speechText: paragraphIsPlayable ? paragraph.text : "",
       paragraphId: paragraph.id,
       paragraphIndex: paragraph.index,
       sentenceId: null,
     };
+    byKey[paragraphKey] = paragraphEntry;
+    paragraphs.push(paragraphEntry);
 
     for (const sentence of paragraph.sentences) {
       const sentenceKey = createPracticeNodeKey("sentence", sentence.id);
-      byKey[sentenceKey] = {
+    const sentenceEntry: PracticeNodeEntry = {
         key: sentenceKey,
         id: sentence.id,
         level: "sentence",
         text: sentence.text,
+        startOffset: sentence.startOffset,
+        endOffset: sentence.endOffset,
+        index: sentence.index,
         speechText: paragraphIsPlayable ? sentence.text : "",
         paragraphId: paragraph.id,
         paragraphIndex: paragraph.index,
         sentenceId: sentence.id,
       };
+      byKey[sentenceKey] = sentenceEntry;
+      sentences.push(sentenceEntry);
 
       for (const token of sentence.tokens) {
         const tokenKey = createPracticeNodeKey("token", token.id);
-        byKey[tokenKey] = {
+        const tokenEntry: PracticeNodeEntry = {
           key: tokenKey,
           id: token.id,
           level: "token",
           text: token.text,
+          startOffset: token.startOffset,
+          endOffset: token.endOffset,
+          index: token.index,
           speechText: paragraphIsPlayable ? token.text : "",
           paragraphId: paragraph.id,
           paragraphIndex: paragraph.index,
           sentenceId: sentence.id,
+          isPunctuation: token.isPunctuation,
         };
+        byKey[tokenKey] = tokenEntry;
+        tokens.push(tokenEntry);
       }
     }
   }
 
-  return { byKey };
+  return { paragraphs, sentences, tokens, byKey };
+}
+
+export function buildHoverCandidateIndex(
+  structuredContent: StructuredContent,
+): HoverCandidateIndex {
+  const practiceNodeIndex = buildPracticeNodeIndex(structuredContent);
+
+  return {
+    paragraphs: practiceNodeIndex.paragraphs,
+    sentences: practiceNodeIndex.sentences,
+    tokens: practiceNodeIndex.tokens,
+    byKey: practiceNodeIndex.byKey,
+  };
 }
 
 export function buildLayoutNodeIndex(input: BuildLayoutNodeIndexInput): LayoutNodeIndex {
@@ -347,9 +399,16 @@ export function computeDistanceDrivenHover(input: {
   layout: LayoutNodeIndex;
 }): HoverEngineResult {
   const { pointer, currentHoveredKey, layout } = input;
+  const currentLevel = currentHoveredKey ? (layout.byKey[currentHoveredKey]?.level ?? null) : null;
 
   if (!pointer.insideTextStage) {
-    return { hoveredKey: null, reason: "exit" };
+    return {
+      hoveredKey: null,
+      hoveredLevel: null,
+      reason: "exit",
+      fromLevel: currentLevel,
+      toLevel: null,
+    };
   }
 
   const current = currentHoveredKey ? layout.byKey[currentHoveredKey] : null;
@@ -357,20 +416,44 @@ export function computeDistanceDrivenHover(input: {
   const bestToken = findBestCandidate(pointer, layout, layout.tokenKeys);
   if (bestToken) {
     if (current?.key === bestToken.key) {
-      return { hoveredKey: bestToken.key, reason: "hold" };
+      return {
+        hoveredKey: bestToken.key,
+        hoveredLevel: "token",
+        reason: "hold",
+        fromLevel: currentLevel,
+        toLevel: "token",
+      };
     }
 
-    return { hoveredKey: bestToken.key, reason: "token-hit" };
+    return {
+      hoveredKey: bestToken.key,
+      hoveredLevel: "token",
+      reason: "token-hit",
+      fromLevel: currentLevel,
+      toLevel: "token",
+    };
   }
 
   if (current) {
     if (pointInRect(pointer, current.exitZoneRect)) {
-      return { hoveredKey: current.key, reason: "hold" };
+      return {
+        hoveredKey: current.key,
+        hoveredLevel: current.level,
+        reason: "hold",
+        fromLevel: currentLevel,
+        toLevel: current.level,
+      };
     }
 
     const fallbackNode = findAncestorFallback(pointer, current, layout);
     if (fallbackNode) {
-      return { hoveredKey: fallbackNode.key, reason: "fallback" };
+      return {
+        hoveredKey: fallbackNode.key,
+        hoveredLevel: fallbackNode.level,
+        reason: "fallback",
+        fromLevel: currentLevel,
+        toLevel: fallbackNode.level,
+      };
     }
   }
 
@@ -378,7 +461,10 @@ export function computeDistanceDrivenHover(input: {
   if (bestSentence) {
     return {
       hoveredKey: bestSentence.key,
+      hoveredLevel: "sentence",
       reason: current ? "fallback" : "sentence-hit",
+      fromLevel: currentLevel,
+      toLevel: "sentence",
     };
   }
 
@@ -386,9 +472,18 @@ export function computeDistanceDrivenHover(input: {
   if (bestParagraph) {
     return {
       hoveredKey: bestParagraph.key,
+      hoveredLevel: "paragraph",
       reason: current ? "fallback" : "paragraph-hit",
+      fromLevel: currentLevel,
+      toLevel: "paragraph",
     };
   }
 
-  return { hoveredKey: null, reason: "exit" };
+  return {
+    hoveredKey: null,
+    hoveredLevel: null,
+    reason: "exit",
+    fromLevel: currentLevel,
+    toLevel: null,
+  };
 }

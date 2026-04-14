@@ -12,14 +12,14 @@
 
 ## 2. 内容处理流水线
 
-- [ ] 定义预置文本与生成文本的 normalize 和 segmentation 流程
-- 当前仅完成最小可用流水线：normalize、段落切分、单句段落、按空白切词；尚未完成真正的 sentence split、speaker 解析与 offset 校验。
+- [x] 定义预置文本与生成文本的 normalize 和 segmentation 流程
+- 当前已统一 normalize 流程、段落切分、缩写友好的 sentence split、speaker/meta 解析与基于原文切片的 offset 对齐校验。
 - [x] 确定前端使用的 `structured_content jsonb` 结构
 - [x] 明确 `structured_content` 到前端运行时节点索引的转换方式
-- [ ] 明确 `HoverCandidateIndex` 与 `LayoutNodeIndex` 的 V1 结构
-- 当前已实现 `LayoutNodeIndex` 与基于几何区域的 hover 计算；`HoverCandidateIndex` 尚未单独建模。
-- [ ] 预留双语翻译扩展边界，保持英文主文本树与翻译层解耦
-- 当前数据结构未引入翻译层字段，但也未把翻译信息耦合进主文本树。
+- [x] 明确 `HoverCandidateIndex` 与 `LayoutNodeIndex` 的 V1 结构
+- 当前已在运行时代码中分别建模 `HoverCandidateIndex` 与 `LayoutNodeIndex`，并保留按层级分组与 `byKey` 索引。
+- [x] 预留双语翻译扩展边界，保持英文主文本树与翻译层解耦
+- 当前已通过独立 `TranslationBundle` 类型与详情接口中的 `translationBundle` 预留位，将翻译层与英文主文本树解耦。
 - [x] 固化预置内容导入路径：后台维护 + TypeScript 导入脚本 + dry-run/apply 模式
 
 ## 3. API
@@ -29,32 +29,35 @@
 - [x] 明确文章进度、阅读状态与场景进度的接口边界
 - [x] 固化 `ArticleReadState.hasRead` 的判定规则
 - 当前规则为收到 `body_interaction` 事件后置为已读，并记录 `first_read_at` / `last_read_at`。
-- [ ] 固化 `GeneratedDraft` 的命名、生命周期与转正边界
-- 当前已实现 create、detail、save-to-scenario，并正在补齐 `insert-to-stage`；discard 与长期管理仍未定义。
-- [ ] 固化 V1 API contract：场景、文章目录、主舞台详情、`GeneratedDraft` 生命周期、进度接口
-- 当前 TypeScript API 类型与路由已成型，但 OpenSpec 文档说明仍需继续收口到最终口径。
+- [x] 固化 `GeneratedDraft` 的命名、生命周期与转正边界
+- 当前已实现 create、detail、insert-to-stage、save-to-scenario、discard，并在服务端限制 `discarded -> insert/save` 与 `saved -> discard`。
+- [x] 固化 V1 API contract：场景、文章目录、主舞台详情、`GeneratedDraft` 生命周期、进度接口
+- 当前 TypeScript API 类型与路由已作为 V1 源口径收口到 `lib/types/api.ts`，OpenSpec 设计文档已同步当前接口形状。
 
 ## 4. 练习界面
 
-- [ ] 设计练习页组件树
+- [x] 设计练习页组件树
 - 当前主舞台已拆分出共享 `frame`、`playback hook`、`header`、`text surface`、`floating player`、`controller`、`layout` 与 `visual` 模块，但 `HoverEngine` 适配层与页面差异边界仍可继续收口。
 - [x] 定义距离驱动的 paragraph / sentence / token 命中与切换规则
-- [ ] 确定方案 A：中心单栏舞台 + 底部播放条 + 底部收起式生成抽屉的组件职责划分
-- 当前界面形态已落地，但职责仍以内联实现为主。
-- [ ] 定义 `TextStage`、`HoverEngine`、`HighlightLayer` 的运行时边界
-- [ ] 明确 HoverEngine 的输入输出契约与状态保持规则
-- 当前 `computeDistanceDrivenHover`、`LayoutNodeIndex`、`reason` 枚举已实现，但尚未抽成独立边界文档。
-- [ ] 固化 HoverEngine 的 `reason` 枚举与状态转移规则表
-- [ ] 固化段 / 句 / 词的视觉语法，以及 `hover` / `playing` 的高亮表达规则
-- [ ] 固化 `PlaybackBar` 的职责、信息密度与状态边界
+- [x] 确定方案 A：中心单栏舞台 + 底部播放条 + 底部收起式生成抽屉的组件职责划分
+- 当前界面形态已通过 `TextStage`、`PlaybackBar`、`DraftStageSurface` 和页面编排层形成稳定职责入口。
+- [x] 定义 `TextStage`、`HoverEngine`、`HighlightLayer` 的运行时边界
+- 当前已提供显式 `TextStage`、`useHoverEngine` 与 `HighlightLayer` 高亮决策模块，页面层不再直接内联这些职责。
+- [x] 明确 HoverEngine 的输入输出契约与状态保持规则
+- 当前 `computeDistanceDrivenHover` 已补齐 `hoveredLevel`、`fromLevel`、`toLevel` 等输出字段，并与设计文档中的输入输出契约保持一致。
+- [x] 固化 HoverEngine 的 `reason` 枚举与状态转移规则表
+- [x] 固化段 / 句 / 词的视觉语法，以及 `hover` / `playing` 的高亮表达规则
+- 当前已将层级色系、形状语法、状态强度与 hover / playing 的高亮差异固化为可测试的视觉规则模块。
+- [x] 固化 `PlaybackBar` 的职责、信息密度与状态边界
+- 当前底部播放区已通过显式 `PlaybackBar` 入口承接播放反馈和控制，与 `TextStage` 的 hover 选择职责分离。
 - [x] 定义主舞台当前场景内的上一篇 / 下一篇导航规则
 - [x] 固化主舞台边界导航规则：禁用边界按钮、不跨场景、不循环
 
 ## 5. 集成边界
 
 - [x] 明确 `OpenWebUI` 的临时角色
-- [ ] 定义 OpenAI 兼容模型与 TTS 接入的 provider 边界
-- 当前 LLM 与 TTS 已分别接入，但 provider abstraction 仍停留在直接调用供应商 API 的阶段。
+- [x] 定义 OpenAI 兼容模型与 TTS 接入的 provider 边界
+- 当前 LLM 与 TTS 已通过 provider 选择器进入独立适配层；V1 默认使用 `openai-compatible` 与 `minimax`，业务层不再直接拼装供应商协议。
 
 ## 6. 前端工程原则
 

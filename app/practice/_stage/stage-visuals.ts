@@ -9,6 +9,38 @@ export const STAGE_SENTENCE_BASE_CLASS =
 export const STAGE_TOKEN_BASE_CLASS =
   "rounded-md px-1.5 py-0.5 text-left transition";
 
+export type VisualState = "base" | "hover" | "playing";
+
+export function getLevelColorToken(level: HoverLevel) {
+  if (level === "paragraph") {
+    return "paragraph";
+  }
+  if (level === "sentence") {
+    return "sentence";
+  }
+  return "token";
+}
+
+export function getLevelShapeLabel(level: HoverLevel) {
+  if (level === "paragraph") {
+    return "block";
+  }
+  if (level === "sentence") {
+    return "band";
+  }
+  return "inline";
+}
+
+export function getVisualStateIntensity(state: VisualState) {
+  if (state === "playing") {
+    return "strong";
+  }
+  if (state === "hover") {
+    return "light";
+  }
+  return "subtle";
+}
+
 export function getParagraphToneClass(index: number) {
   if (index === 0) {
     return "border-[var(--paragraph)]/35 bg-[var(--paragraph)]/6";

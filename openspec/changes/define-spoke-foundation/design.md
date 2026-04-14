@@ -15,11 +15,11 @@ Scenario -> Content Item -> Paragraph / Sentence / Token -> Hover / Click -> TTS
 截至 2026-03-31，代码实现与本设计的大体对齐情况如下：
 
 - 已落地：`Next.js App Router` 应用骨架、`PostgreSQL` schema、场景目录页、文章目录页、练习主舞台、`generated_drafts` 基础生命周期、文章进度与已读状态接口。
-- 已落地：`structured_content` 的 V1 树结构、前端运行时节点索引、基于布局矩形的距离驱动 hover 计算、MiniMax TTS 播放链路。
+- 已落地：`structured_content` 的 V1 树结构、前端运行时节点索引、`HoverCandidateIndex` / `LayoutNodeIndex`、基于布局矩形的距离驱动 hover 计算、TTS provider 边界下的 MiniMax 播放链路。
 - 部分落地：内容处理流水线目前只覆盖最小可用版本，已支持 normalize、段落切分和基础 token 切分，但真正的 sentence split、speaker 解析、offset 校验和翻译层扩展边界仍未完成。
-- 部分落地：主舞台形态已经是“中心单栏舞台 + 底部播放区 + 生成抽屉”，但 `TextStage`、`HoverEngine`、`HighlightLayer`、`PlaybackBar` 等职责仍主要耦合在单个客户端组件中。
-- 部分落地：`GeneratedDraft` 已支持创建、查看、保存为正式 `ContentItem`，`insert-to-stage` 线路正在补齐，discard 与后台管理尚未定义。
-- 未完全落地：provider layer 仍未抽象为独立适配边界，当前生成与 TTS 仍直接调用供应商兼容接口。
+- 已落地：主舞台形态已经收口为“中心单栏舞台 + 底部播放区 + 生成抽屉”，并通过显式 `TextStage`、`HoverEngine`、`HighlightLayer`、`PlaybackBar` 边界保持页面编排层与运行时职责分离。
+- 已落地：`GeneratedDraft` 已支持创建、查看、插入预览舞台、保存为正式 `ContentItem` 与显式 discard；服务端已限制 `discarded` 不能再插入或保存，`saved` 不能再 discard。
+- 已落地：provider layer 已抽象为独立适配边界；当前 V1 默认通过 `openai-compatible` 生成 provider 和 `minimax` TTS provider 运行，后续替换供应商时不需要改业务调用层。
 
 ## 信息架构
 
@@ -137,6 +137,13 @@ provider layer
 ```
 
 `OpenWebUI` 被有意放在主用户路径之外，这样后续迁移到自定义后台或自定义管理系统时，不需要重构产品主界面。
+
+当前实现约定：
+
+- 文本生成侧通过 provider 选择器进入 `openai-compatible` 适配层，再由适配层负责协议请求与响应解析
+- TTS 侧通过 provider 选择器进入 `minimax` 适配层，再由适配层负责协议请求与音频数据提取
+- 业务层继续只依赖 `generateDraftText` 与 `synthesizeSpeech` 这样的稳定入口
+- provider 名称通过环境变量控制，V1 默认值分别为 `OPENAI_PROVIDER=openai-compatible` 与 `TTS_PROVIDER=minimax`
 
 ## 后端语言与框架选型
 
@@ -592,6 +599,7 @@ V1 API 分为五组：
 - `POST /api/generated-drafts`
 - `POST /api/generated-drafts/:id/insert-to-stage`
 - `POST /api/generated-drafts/:id/save`
+- `POST /api/generated-drafts/:id/discard`
 
 规则：
 
@@ -626,7 +634,9 @@ V1 API 分为五组：
 - `contentItem` 负责内容元数据与原始文本
 - `structuredContent` 负责段 / 句 / 词结构树
 
-### V1 API contract 草案
+### V1 API contract
+
+当前代码中的 TypeScript 源口径位于 `lib/types/api.ts`，各路由处理器以该文件中的请求 / 响应类型为准。
 
 #### 场景接口
 
@@ -861,6 +871,22 @@ V1 API 分为五组：
 }
 ```
 
+`POST /api/generated-drafts/:id/discard`
+
+用途：
+
+- 丢弃未转正的草稿，并结束其生命周期
+
+响应示例：
+
+```json
+{
+  "generatedDraftId": "gd_001",
+  "status": "discarded",
+  "discarded": true
+}
+```
+
 #### 进度接口
 
 `POST /api/content-items/:id/read`
@@ -1017,18 +1043,21 @@ V1 期望支持的动作：
 
 ```text
 generate request
-  -> GeneratedDraft(created)
+  -> GeneratedDraft(ready)
   -> GeneratedDraft(inserted_to_stage?)
-  -> GeneratedDraft(saved_as_content_item?)
-  -> GeneratedDraft(discarded?)
+  -> GeneratedDraft(saved -> content_item)
+   \-> GeneratedDraft(discarded)
 ```
 
 规则：
 
-- `GeneratedDraft` 可以插入主舞台而不入库
+- V1 当前同步生成链路直接产出 `ready` 草稿；schema 中的 `created` 保留给未来异步生成或排队态
+- `GeneratedDraft` 可以插入主舞台而不转正
 - `GeneratedDraft` 可以直接保存到当前场景数据库
-- `GeneratedDraft` 插入主舞台后仍可选择保存或放弃
+- `GeneratedDraft` 插入主舞台后仍可选择保存或 discard
 - 保存到场景数据库意味着将 `GeneratedDraft` 转化为正式 `ContentItem`
+- `discarded` 草稿不能再次插入主舞台或保存
+- `saved` 草稿保留回指关系，但不能再 discard
 - 主舞台应尽量以一致方式消费 `GeneratedDraft` 与正式 `ContentItem`
 
 进度边界：
@@ -1273,6 +1302,7 @@ ContentItem
 
 - `Sentence.id` 必须稳定，以支持未来的翻译映射
 - 双语扩展不改变英文主文本的 offset 坐标系
+- V1 详情接口可显式预留 `translationBundle: null`，但 `structuredContent` 继续只返回英文主文本树
 
 ## 前端运行时数据边界
 

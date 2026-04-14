@@ -2,6 +2,7 @@ import { getDbPool } from "@/db";
 import type {
   CreateGeneratedDraftRequest,
   CreateGeneratedDraftResponse,
+  DiscardGeneratedDraftResponse,
   GeneratedDraftDetailResponse,
   InsertGeneratedDraftToStageResponse,
   SaveGeneratedDraftResponse,
@@ -21,6 +22,8 @@ type GeneratedDraftInsertRow = {
   status: "ready";
 };
 
+type GeneratedDraftStatus = "created" | "ready" | "saved" | "discarded";
+
 type GeneratedDraftRow = {
   id: string;
   scenario_id: string;
@@ -31,6 +34,8 @@ type GeneratedDraftRow = {
   content_kind: "dialogue" | "monologue" | "qa" | "script";
   difficulty_level: string;
   generation_prompt: string;
+  status: GeneratedDraftStatus;
+  inserted_to_stage: boolean;
   saved_content_item_id: string | null;
 };
 
@@ -40,6 +45,11 @@ type SavedContentItemRow = {
 
 type InsertedDraftRow = {
   id: string;
+};
+
+type DiscardedDraftRow = {
+  id: string;
+  status: "discarded";
 };
 
 type BuildGeneratedDraftTitleInput = {
@@ -258,6 +268,34 @@ export function buildInsertGeneratedDraftToStageResponse(
   };
 }
 
+export function buildDiscardGeneratedDraftResponse(
+  id: string,
+): DiscardGeneratedDraftResponse {
+  return {
+    generatedDraftId: id,
+    status: "discarded",
+    discarded: true,
+  };
+}
+
+function assertDraftCanInsert(status: GeneratedDraftStatus) {
+  if (status === "discarded") {
+    throw new Error("Discarded draft cannot be inserted to stage");
+  }
+}
+
+function assertDraftCanSave(status: GeneratedDraftStatus) {
+  if (status === "discarded") {
+    throw new Error("Discarded draft cannot be saved");
+  }
+}
+
+function assertDraftCanDiscard(status: GeneratedDraftStatus) {
+  if (status === "saved") {
+    throw new Error("Saved draft cannot be discarded");
+  }
+}
+
 export async function createGeneratedDraft(
   input: CreateGeneratedDraftRequest,
 ): Promise<CreateGeneratedDraftResponse> {
@@ -357,7 +395,7 @@ type GeneratedDraftDetailRow = {
   generated_draft_title: string;
   content_kind: "dialogue" | "monologue" | "qa" | "script";
   difficulty_level: string;
-  draft_status: string;
+  draft_status: GeneratedDraftStatus;
   inserted_to_stage: boolean;
   saved_content_item_id: string | null;
   structured_content: StructuredContent;
@@ -412,6 +450,7 @@ export async function getGeneratedDraftDetail(
       savedContentItemId: row.saved_content_item_id,
     },
     structuredContent: row.structured_content,
+    translationBundle: null,
   };
 }
 
@@ -419,6 +458,27 @@ export async function insertGeneratedDraftToStage(
   id: string,
 ): Promise<InsertGeneratedDraftToStageResponse> {
   const pool = getDbPool();
+  const statusResult = await pool.query<{ id: string; status: GeneratedDraftStatus; inserted_to_stage: boolean }>(
+    `
+      SELECT id, status, inserted_to_stage
+      FROM generated_drafts
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [id],
+  );
+
+  const existing = statusResult.rows[0];
+  if (!existing) {
+    throw new Error("Generated draft not found");
+  }
+
+  assertDraftCanInsert(existing.status);
+
+  if (existing.inserted_to_stage) {
+    return buildInsertGeneratedDraftToStageResponse(existing.id);
+  }
+
   const result = await pool.query<InsertedDraftRow>(
     `
       UPDATE generated_drafts
@@ -460,6 +520,8 @@ export async function saveGeneratedDraftAsContentItem(
           content_kind,
           difficulty_level,
           generation_prompt,
+          status,
+          inserted_to_stage,
           saved_content_item_id
         FROM generated_drafts
         WHERE id = $1
@@ -472,6 +534,8 @@ export async function saveGeneratedDraftAsContentItem(
     if (!draft) {
       throw new Error("Generated draft not found");
     }
+
+    assertDraftCanSave(draft.status);
 
     if (draft.saved_content_item_id) {
       await client.query("COMMIT");
@@ -519,6 +583,7 @@ export async function saveGeneratedDraftAsContentItem(
         UPDATE generated_drafts
         SET
           status = 'saved',
+          inserted_to_stage = TRUE,
           saved_content_item_id = $2,
           updated_at = NOW()
         WHERE id = $1
@@ -538,4 +603,44 @@ export async function saveGeneratedDraftAsContentItem(
   } finally {
     client.release();
   }
+}
+
+export async function discardGeneratedDraft(
+  id: string,
+): Promise<DiscardGeneratedDraftResponse> {
+  const pool = getDbPool();
+  const result = await pool.query<{ id: string; status: GeneratedDraftStatus }>(
+    `
+      SELECT id, status
+      FROM generated_drafts
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [id],
+  );
+
+  const draft = result.rows[0];
+  if (!draft) {
+    throw new Error("Generated draft not found");
+  }
+
+  if (draft.status === "discarded") {
+    return buildDiscardGeneratedDraftResponse(draft.id);
+  }
+
+  assertDraftCanDiscard(draft.status);
+
+  const updateResult = await pool.query<DiscardedDraftRow>(
+    `
+      UPDATE generated_drafts
+      SET
+        status = 'discarded',
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, status
+    `,
+    [id],
+  );
+
+  return buildDiscardGeneratedDraftResponse(updateResult.rows[0].id);
 }

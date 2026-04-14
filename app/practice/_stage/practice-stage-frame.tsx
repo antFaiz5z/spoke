@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
-import { FloatingPlayer } from "./floating-player";
+import { PlaybackBar } from "./playback-bar";
 import { StageHeader } from "./stage-header";
-import { TextStageSurface } from "./text-stage-surface";
+import { TextStage } from "./text-stage";
 
 type PracticeStageFrameProps = {
   headerProps: React.ComponentProps<typeof StageHeader>;
-  textStageProps: React.ComponentProps<typeof TextStageSurface>;
-  playerProps: React.ComponentProps<typeof FloatingPlayer>;
+  textStageProps: React.ComponentProps<typeof TextStage>;
+  playerProps: React.ComponentProps<typeof PlaybackBar>;
   overlay?: ReactNode;
   floatingActionButton?: ReactNode;
 };
@@ -24,14 +24,14 @@ export function PracticeStageFrame({
 
       <div className="fixed inset-0">
         <div className="relative h-full overflow-hidden">
-          <TextStageSurface {...textStageProps} />
+          <TextStage {...textStageProps} />
           {overlay}
         </div>
       </div>
 
       {floatingActionButton}
 
-      <FloatingPlayer {...playerProps} />
+      <PlaybackBar {...playerProps} />
     </main>
   );
 }

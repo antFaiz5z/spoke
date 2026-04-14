@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildHoverCandidateIndex,
   buildLayoutNodeIndex,
   buildPracticeNodeIndex,
   buildRectMapFromElements,
@@ -100,6 +101,9 @@ test("createPracticeNodeKey produces stable level-prefixed keys", () => {
 test("buildPracticeNodeIndex flattens paragraph, sentence, and token nodes", () => {
   const index = buildPracticeNodeIndex(structuredContent);
 
+  assert.equal(index.paragraphs.length, 2);
+  assert.equal(index.sentences.length, 2);
+  assert.equal(index.tokens.length, 3);
   assert.equal(index.byKey["paragraph:p0"].text, "You are taking a job interview.");
   assert.equal(index.byKey["paragraph:p0"].speechText, "");
   assert.equal(index.byKey["paragraph:p1"].speechText, "Tell me about yourself.");
@@ -109,6 +113,15 @@ test("buildPracticeNodeIndex flattens paragraph, sentence, and token nodes", () 
   assert.equal(index.byKey["token:t1"].paragraphId, "p1");
   assert.equal(index.byKey["token:t0"].speechText, "");
   assert.equal(index.byKey["token:t2"].text, ".");
+});
+
+test("buildHoverCandidateIndex preserves text-order candidates for hover decisions", () => {
+  const index = buildHoverCandidateIndex(structuredContent);
+
+  assert.equal(index.paragraphs[0]?.key, "paragraph:p0");
+  assert.equal(index.sentences[1]?.key, "sentence:s1");
+  assert.equal(index.tokens[2]?.key, "token:t2");
+  assert.equal(index.byKey["token:t2"]?.isPunctuation, true);
 });
 
 test("getParagraphProgressIndex resolves a node key back to the owning paragraph index", () => {
@@ -214,7 +227,10 @@ test("computeDistanceDrivenHover prefers token over sentence and paragraph when 
   });
 
   assert.equal(result.hoveredKey, "token:t1");
+  assert.equal(result.hoveredLevel, "token");
   assert.equal(result.reason, "token-hit");
+  assert.equal(result.fromLevel, null);
+  assert.equal(result.toLevel, "token");
 });
 
 test("buildLayoutNodeIndex builds paragraph, sentence, and token hit zones from measured rects", () => {
@@ -448,5 +464,8 @@ test("computeDistanceDrivenHover exits when pointer leaves the text stage", () =
   });
 
   assert.equal(result.hoveredKey, null);
+  assert.equal(result.hoveredLevel, null);
   assert.equal(result.reason, "exit");
+  assert.equal(result.fromLevel, "paragraph");
+  assert.equal(result.toLevel, null);
 });
