@@ -154,3 +154,7 @@ Not yet implemented as full user-facing features:
 - Foundation design: `openspec/changes/define-spoke-foundation/design.md`
 - Database notes: `db/README.md`
 - Script notes: `scripts/README.md`
+
+## License
+
+This project is licensed under the `MIT` License. See `LICENSE`.

@@ -159,3 +159,7 @@ npm run rebuild:structured-content -- --apply --target all
 - Foundation 设计：`openspec/changes/define-spoke-foundation/design.md`
 - 数据库说明：`db/README.md`
 - 脚本说明：`scripts/README.md`
+
+## License
+
+本项目采用 `MIT` 许可证。详见 `LICENSE`。
